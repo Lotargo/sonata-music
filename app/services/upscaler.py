@@ -10,6 +10,73 @@ from pydub import AudioSegment
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+import soundfile as sf
+import numpy as np
+import audiosr.utils
+
+# PATCH: Override audiosr.utils.read_wav_file to use soundfile instead of torchaudio.load
+# This fixes "Could not load libtorchcodec" errors on Windows/some environments.
+def custom_read_wav_file(filename):
+    # Load with soundfile
+    data, sr = sf.read(filename)
+
+    # soundfile returns [samples, channels] or [samples]
+    # torchaudio expected [channels, samples]
+    if len(data.shape) == 1:
+        # Mono -> [1, samples]
+        waveform = torch.from_numpy(data).float().unsqueeze(0)
+    else:
+        # Stereo/Multi -> [channels, samples]
+        waveform = torch.from_numpy(data).float().t()
+
+    # Calculate duration
+    duration = waveform.size(-1) / sr
+
+    # Logic from audiosr.utils.read_wav_file
+    if(duration > 10.24):
+        print("\033[93m {}\033[00m" .format("Warning: audio is longer than 10.24 seconds, may degrade the model performance. It's recommand to truncate your audio to 5.12 seconds before input to AudioSR to get the best performance."))
+
+    if(duration % 5.12 != 0):
+        pad_duration = duration + (5.12 - duration % 5.12)
+    else:
+        pad_duration = duration
+
+    target_frame = int(pad_duration * 100)
+
+    # Resample
+    if sr != 48000:
+        resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=48000)
+        waveform = resampler(waveform)
+
+    # Explicitly take first channel as numpy (audiosr logic)
+    waveform_np = waveform.numpy()[0, ...]
+
+    # Normalize (audiosr.utils.normalize_wav logic inlined)
+    waveform_np = waveform_np - np.mean(waveform_np)
+    waveform_np = waveform_np / (np.max(np.abs(waveform_np)) + 1e-8)
+    waveform_np = waveform_np * 0.5
+
+    waveform_np = waveform_np[None, ...] # Add channel dim back: [1, samples]
+
+    # Pad (audiosr.utils.pad_wav logic inlined)
+    target_length = int(48000 * pad_duration)
+    waveform_length = waveform_np.shape[-1]
+
+    if waveform_length < target_length:
+        temp_wav = np.zeros((1, target_length), dtype=np.float32)
+        # audiosr uses rand_start = 0
+        temp_wav[:, 0 : waveform_length] = waveform_np
+        waveform_np = temp_wav
+
+    return waveform_np, target_frame, pad_duration
+
+# Apply the patch
+try:
+    audiosr.utils.read_wav_file = custom_read_wav_file
+    logger.info("Applied runtime patch to audiosr.utils.read_wav_file using soundfile.")
+except Exception as e:
+    logger.error(f"Failed to apply runtime patch to audiosr: {e}")
+
 class UpscalerService:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"

@@ -10,6 +10,7 @@ dependencies = [
     "flask-sqlalchemy>=3.1.1",
     "mutagen>=1.47.0",
     "pydub>=0.25.1",
+    "soundfile>=0.12.1",
     "scipy>=1.15.3",
     "setuptools>=80.10.2",
     "matplotlib>=3.8.0",
