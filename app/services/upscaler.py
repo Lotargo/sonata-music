@@ -4,6 +4,7 @@ import torchaudio
 import logging
 import subprocess
 from audiosr.pipeline import build_model, super_resolution
+# Explicitly import where we need to patch
 import audiosr.utils
 import audiosr.pipeline
 import soundfile as sf
@@ -110,21 +111,23 @@ class UpscalerService:
 
         temp_wav = None
         try:
-            # Manually load full audio to avoid audiosr truncation
+            # Check if input is long and needs segmentation/batching
+            # Audiosr default pipeline truncates or processes single segment.
+            # To support long files with batching, we need to manually chunk.
+
+            # Read file (using our safe reader)
+            # read_wav_file returns [1, samples] normalized and padded to 5.12s
+            # But for long files, we want to read the raw full file first to chunk it ourselves.
             try:
                 waveform, sr = torchaudio.load(input_path, backend="soundfile")
-            except Exception as e:
-                logger.warning(f"Failed to load with torchaudio: {e}. Trying sf.read")
+            except:
                 data, sr = sf.read(input_path)
                 if data.ndim == 1: data = data[None, :]
                 else: data = data.T
                 waveform = torch.from_numpy(data).float()
 
-            logger.info(f"Loaded waveform shape: {waveform.shape}, sr: {sr}")
-
             # Resample to 48k
             if sr != 48000:
-                logger.info("Resampling to 48000Hz...")
                 resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=48000)
                 waveform = resampler(waveform)
                 sr = 48000
@@ -132,8 +135,6 @@ class UpscalerService:
             # Mix to mono
             if waveform.shape[0] > 1:
                 waveform = torch.mean(waveform, dim=0, keepdim=True)
-
-            logger.info(f"Processed waveform shape: {waveform.shape}")
 
             # Duration
             duration = waveform.shape[-1] / sr
@@ -168,71 +169,72 @@ class UpscalerService:
 
                 # Create segments with padding if needed
                 pad_len = num_segments * samples_per_segment - waveform.shape[-1]
-                logger.info(f"Padding waveform with {pad_len} samples to match segment multiples.")
-
                 if pad_len > 0:
                     waveform = torch.nn.functional.pad(waveform, (0, pad_len))
 
                 # Slice segments
                 for i in range(num_segments):
                     seg = waveform[:, i*samples_per_segment : (i+1)*samples_per_segment]
-                    if seg.shape[-1] != samples_per_segment:
-                        logger.error(f"Segment {i} has unexpected length: {seg.shape}")
                     segments.append(seg)
 
                 # Process batches
                 processed_segments = []
 
+                # Function to process a batch of tensors
                 def process_batch_tensors(batch_tensors):
+                    # Extract features for each item in batch
                     batch_log_mel = []
+                    batch_stft = []
                     batch_waveform = []
                     batch_lowpass_mel = []
 
                     target_frame = 100 * 5.12 # 512
 
-                    for idx, wav in enumerate(batch_tensors):
-                        try:
-                            # wav is [1, samples]
-                            # wav_feature_extraction expects numpy 1D
-                            wav_np = wav.numpy()[0, ...]
+                    for wav in batch_tensors:
+                        # wav is [1, samples]
+                        # wav_feature_extraction expects 2D numpy array [1, samples]
+                        # because it blindly slices index 0.
+                        wav_np = wav.numpy() # [1, samples]
 
-                            # Log shape for debugging
-                            # logger.info(f"Processing segment {idx}, shape: {wav_np.shape}")
+                        log_mel, stft = audiosr.utils.wav_feature_extraction(wav_np, int(target_frame))
 
-                            log_mel, stft = audiosr.utils.wav_feature_extraction(wav_np, int(target_frame))
+                        # Prepare inference dict for lowpass
+                        mini_batch = {
+                            "waveform": wav,
+                            "sampling_rate": 48000
+                        }
 
-                            mini_batch = {
-                                "waveform": wav,
-                                "sampling_rate": 48000
-                            }
+                        lp_dict = audiosr.utils.lowpass_filtering_prepare_inference(mini_batch)
+                        wav_lp = lp_dict["waveform_lowpass"]
 
-                            lp_dict = audiosr.utils.lowpass_filtering_prepare_inference(mini_batch)
-                            wav_lp = lp_dict["waveform_lowpass"]
+                        # Extract lowpass features
+                        # wav_lp might be [samples] (1D) because lowpass return 1D
+                        # We must reshape to [1, samples] for wav_feature_extraction
+                        wav_lp_np = wav_lp.numpy()
+                        if wav_lp_np.ndim == 1:
+                            wav_lp_np = wav_lp_np[None, :]
 
-                            # Extract lowpass features
-                            wav_lp_np = wav_lp.numpy()
-                            if wav_lp_np.ndim > 1: wav_lp_np = wav_lp_np[0]
+                        lp_mel, lp_stft = audiosr.utils.wav_feature_extraction(wav_lp_np, int(target_frame))
 
-                            lp_mel, lp_stft = audiosr.utils.wav_feature_extraction(wav_lp_np, int(target_frame))
+                        batch_log_mel.append(torch.FloatTensor(log_mel).unsqueeze(0))
+                        batch_stft.append(torch.FloatTensor(stft).unsqueeze(0))
+                        batch_waveform.append(wav.unsqueeze(0)) # [1, 1, samples]
+                        batch_lowpass_mel.append(torch.FloatTensor(lp_mel).unsqueeze(0))
 
-                            batch_log_mel.append(torch.FloatTensor(log_mel).unsqueeze(0))
-                            batch_waveform.append(wav.unsqueeze(0))
-                            batch_lowpass_mel.append(torch.FloatTensor(lp_mel).unsqueeze(0))
-                        except Exception as e:
-                            logger.error(f"Error processing segment tensor: {e}")
-                            raise e
-
+                    # Stack
                     final_batch = {
-                        "log_mel_spec": torch.cat(batch_log_mel, dim=0),
+                        "log_mel_spec": torch.cat(batch_log_mel, dim=0), # [B, 1, F, T]
                         "lowpass_mel": torch.cat(batch_lowpass_mel, dim=0),
                         "waveform": torch.cat(batch_waveform, dim=0),
                     }
 
+                    # Move to device
                     for k in final_batch:
                         final_batch[k] = final_batch[k].to(self.device)
                         if self.device == "cuda":
-                            final_batch[k] = final_batch[k].half()
+                            final_batch[k] = final_batch[k].half() # Cast if model is half
 
+                    # Inference
                     with torch.no_grad():
                         out = self.model.generate_batch(
                             final_batch,
@@ -248,6 +250,7 @@ class UpscalerService:
                     batch_chunk = segments[i : i + batch_size]
                     logger.info(f"Processing batch {i//batch_size + 1}/{(len(segments)+batch_size-1)//batch_size}")
 
+                    # Ensure autocast is active
                     if self.device == "cuda":
                         with torch.autocast(device_type="cuda", dtype=torch.float16):
                             out_batch = process_batch_tensors(batch_chunk)
@@ -257,8 +260,10 @@ class UpscalerService:
                     for j in range(out_batch.shape[0]):
                         processed_segments.append(out_batch[j])
 
+                # Concatenate
                 waveform = torch.cat(processed_segments, dim=-1)
 
+                # Trim padding
                 if pad_len > 0:
                     waveform = waveform[..., :-pad_len]
 
@@ -287,7 +292,8 @@ class UpscalerService:
                 waveform = resampler(waveform)
                 logger.info(f"Resampled waveform shape: {waveform.shape}")
 
-            # Calculate estimated size in MB
+            # Calculate estimated size in MB: samples * channels * bytes_per_sample / 1024 / 1024
+            # Using 4 bytes for float32 (internal) or 3 bytes for 24-bit
             est_size = (waveform.shape[0] * waveform.shape[1] * 4) / (1024 * 1024)
             logger.info(f"Estimated uncompressed size: {est_size:.2f} MB")
 
