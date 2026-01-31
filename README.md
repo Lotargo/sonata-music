@@ -1,65 +1,71 @@
-# Audio Upscaler Backend
+# AudioSR Pro: AI-Powered Audio Upscaler & Library
 
-A Flask-based backend for upscaling audio using [AudioSR](https://github.com/haoheliu/AudioSR).
+An ambitious project to transform low-quality audio (e.g., from Suno) into high-fidelity music using state-of-the-art AI.
 
-## Features
+## 🚀 Features
 
-- **Audio Super Resolution**: Upscale low-quality audio to 48kHz.
-- **Library Management**: Store and manage original and processed tracks.
-- **GPU Acceleration**: Automatically detects and uses CUDA if available.
-- **REST API**: Simple endpoints for upload, processing, and retrieval.
+### ✨ AI-Powered Upscaling
+- **Audio Super Resolution**: Powered by [AudioSR](https://github.com/haoheliu/AudioSR), converting muffled audio (16kHz/24kHz) into crystal clear 48kHz+ signals.
+- **Customizable Output**: Choose your preferred format (**MP3, WAV, FLAC, OGG**).
+- **Quality Control**: Configure target **Sample Rate** (up to 96kHz) and **Bitrate** (up to 320kbps).
 
-## Requirements
+### 🎨 Professional Web Interface
+- **SoundCloud-Style Player**: Interactive waveforms powered by `Wavesurfer.js`.
+- **Modern Library**: Card-based grid with auto-extracted **Cover Art** and **Metadata** (Title, Artist).
+- **Seamless Experience**: Drag & drop uploads, real-time processing status, and responsive design using Tailwind CSS.
+- **Full Control**: Edit track details or remove files from your library directly from the UI.
 
-- Python 3.10+
-- `uv` (for dependency management)
-- NVIDIA GPU with CUDA (recommended)
+### ⚙️ Robust Backend
+- **NVIDIA CUDA Ready**: Automatic GPU detection with a reliable CPU fallback.
+- **Async Processing**: Multi-threaded upscaling so you can keep browsing while the AI works.
+- **SQLite Persistence**: Reliable storage for your library and settings.
 
-## Installation
+## 🛠️ Technology Stack
 
-1.  **Install `uv`** (if not already installed):
+- **Backend**: Python 3.10, Flask, SQLAlchemy
+- **AI/DSP**: AudioSR, PyTorch, Torchaudio, Pydub, Mutagen
+- **Frontend**: Tailwind CSS, Wavesurfer.js, Lucide Icons
+- **Tooling**: `uv` for lightning-fast dependency management
+
+## 📦 Installation
+
+1.  **Install `uv`** (the modern Python package manager):
     ```bash
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
-2.  **Install dependencies**:
+2.  **Clone & Install Dependencies**:
     ```bash
     uv sync
     ```
 
-3.  **Check Environment**:
-    Run the environment check script to verify Python version and CUDA availability.
+3.  **Verify Environment**:
+    Check if your system is ready for AI upscaling (detects Python version and CUDA):
     ```bash
     uv run check_env.py
     ```
 
-## Usage
+## 🚀 Getting Started
 
-1.  **Start the server**:
+1.  **Launch the Application**:
     ```bash
     uv run main.py
     ```
-    The server will start at `http://0.0.0.0:5000`.
+2.  **Open in Browser**:
+    Navigate to `http://localhost:5000` to access the interface.
 
-2.  **API Endpoints**:
+## 📁 Project Structure
 
-    -   `POST /upload`: Upload an audio file (key: `file`). Returns track info including ID.
-    -   `POST /process/<track_id>`: Start upscaling for a track.
-    -   `GET /library`: List all tracks.
-    -   `GET /uploads/<filename>`: Download original file.
-    -   `GET /library/<filename>`: Download processed file.
+- `app/`:
+    - `templates/`: HTML interface.
+    - `static/`: Frontend assets (CSS, JS, Extracted Covers).
+    - `services/`: AI upscaling, metadata extraction, and format conversion.
+    - `models.py`: SQLite database schema.
+    - `routes.py`: API and frontend routing.
+- `uploads/`: Raw original files.
+- `library/`: High-quality upscaled results.
 
-## Project Structure
+## ⚠️ Notes
 
--   `app/`: Application source code.
-    -   `models.py`: Database models.
-    -   `routes.py`: API routes.
-    -   `services/upscaler.py`: Wrapper for AudioSR.
--   `uploads/`: Stores uploaded original files.
--   `library/`: Stores processed (upscaled) files.
--   `tests/`: Unit tests.
-
-## Notes
-
--   First run of the upscaler will download the AudioSR model checkpoints automatically.
--   Processing on CPU is significantly slower than on GPU.
+- **Initial Run**: The first upscaling task will automatically download the required AudioSR model weights (~2GB).
+- **Performance**: While CPU works perfectly, an **NVIDIA GPU** is highly recommended for near-instant generation.
