@@ -68,7 +68,11 @@ class APITestCase(unittest.TestCase):
 
             # Patch threading.Thread to run synchronously for test stability or just checking it starts
             with patch('threading.Thread') as mock_thread:
-                response = self.client.post(f'/process/{track_id}')
+                response = self.client.post(
+                    f'/process/{track_id}',
+                    data=json.dumps({'format': 'wav', 'sample_rate': 48000, 'bitrate': '320k'}),
+                    content_type='application/json'
+                )
                 self.assertEqual(response.status_code, 202)
 
                 data = json.loads(response.data)

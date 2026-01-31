@@ -3,6 +3,7 @@ import torch
 import torchaudio
 import logging
 from audiosr.pipeline import build_model, super_resolution
+from pydub import AudioSegment
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,17 +26,17 @@ class UpscalerService:
                 logger.error(f"Failed to load AudioSR model: {e}")
                 raise e
 
-    def process_track(self, input_path, output_path, ddim_steps=50, guidance_scale=3.5):
+    def process_track(self, input_path, output_path, ddim_steps=50, guidance_scale=3.5,
+                      target_format="wav", target_sample_rate=48000, target_bitrate="320k"):
         """
-        Upscale the audio file at input_path and save to output_path.
+        Upscale the audio file at input_path and save to output_path with desired format and quality.
         """
         self.load_model()
 
-        logger.info(f"Starting upscaling: {input_path} -> {output_path}")
+        logger.info(f"Starting upscaling: {input_path} -> {output_path} (format: {target_format}, sr: {target_sample_rate}, br: {target_bitrate})")
 
         try:
             # Perform super resolution
-            # The function signature handles reading the file
             waveform = super_resolution(
                 self.model,
                 input_path,
@@ -44,19 +45,42 @@ class UpscalerService:
                 guidance_scale=guidance_scale
             )
 
-            # waveform shape expected: [1, channels, samples] or [channels, samples]
-            # audiosr usually outputs 48kHz
-
             if waveform.dim() == 3:
                 waveform = waveform.squeeze(0)
 
             # Ensure directory exists
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
-            # Save the file
-            torchaudio.save(output_path, waveform.cpu(), 48000)
-            logger.info(f"Successfully saved upscaled audio to {output_path}")
+            # Temporary wav file if we need to convert
+            temp_wav = output_path if target_format.lower() == "wav" else output_path + ".tmp.wav"
 
+            # Resample if needed
+            if target_sample_rate != 48000:
+                resampler = torchaudio.transforms.Resample(orig_freq=48000, new_freq=target_sample_rate)
+                waveform = resampler(waveform)
+
+            # Save as WAV first
+            torchaudio.save(temp_wav, waveform.cpu(), target_sample_rate)
+
+            if target_format.lower() != "wav":
+                # Convert to target format using pydub
+                audio = AudioSegment.from_wav(temp_wav)
+
+                format_map = {
+                    'mp3': 'mp3',
+                    'flac': 'flac',
+                    'ogg': 'ogg',
+                    'vorbis': 'ogg'
+                }
+                out_fmt = format_map.get(target_format.lower(), target_format.lower())
+
+                audio.export(output_path, format=out_fmt, bitrate=target_bitrate)
+
+                # Clean up temp file
+                if os.path.exists(temp_wav):
+                    os.remove(temp_wav)
+
+            logger.info(f"Successfully saved upscaled audio to {output_path}")
             return True
 
         except Exception as e:
