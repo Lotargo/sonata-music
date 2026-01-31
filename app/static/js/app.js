@@ -16,6 +16,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const filenameDisplay = document.getElementById('filename-display');
     const removeFile = document.getElementById('remove-file');
     const startUpload = document.getElementById('start-upload');
+    const targetFormat = document.getElementById('target-format');
+    const bitrateContainer = document.getElementById('bitrate-container');
     const playerBar = document.getElementById('player-bar');
     const playPauseBtn = document.getElementById('play-pause');
     const volumeSlider = document.getElementById('volume');
@@ -105,6 +107,16 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         return `<span class="absolute top-2 right-2 ${colors[status] || 'bg-slate-500'} text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-wider shadow-md">${status}</span>`;
     }
+
+    // Format change handling
+    targetFormat.onchange = () => {
+        const format = targetFormat.value;
+        if (format === 'wav' || format === 'flac') {
+            bitrateContainer.classList.add('opacity-30', 'pointer-events-none');
+        } else {
+            bitrateContainer.classList.remove('opacity-30', 'pointer-events-none');
+        }
+    };
 
     // Upload Functions
     uploadBtn.onclick = () => uploadModal.classList.remove('hidden');

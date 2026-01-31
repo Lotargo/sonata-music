@@ -7,7 +7,7 @@ An ambitious project to transform low-quality audio (e.g., from Suno) into high-
 ### ✨ AI-Powered Upscaling
 - **Audio Super Resolution**: Powered by [AudioSR](https://github.com/haoheliu/AudioSR), converting muffled audio (16kHz/24kHz) into crystal clear 48kHz+ signals.
 - **Customizable Output**: Choose your preferred format (**MP3, WAV, FLAC, OGG**).
-- **Quality Control**: Configure target **Sample Rate** (up to 96kHz) and **Bitrate** (up to 320kbps).
+- **Quality Control**: Configure target **Sample Rate** (up to 96kHz) and **Bitrate** (up to 4608kbps).
 
 ### 🎨 Professional Web Interface
 - **SoundCloud-Style Player**: Interactive waveforms powered by `Wavesurfer.js`.

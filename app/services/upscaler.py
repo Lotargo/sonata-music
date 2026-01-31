@@ -60,7 +60,14 @@ class UpscalerService:
                 waveform = resampler(waveform)
 
             # Save as WAV first
-            torchaudio.save(temp_wav, waveform.cpu(), target_sample_rate)
+            # For lossless formats, we try to use 24-bit for professional quality
+            if target_format.lower() in ["wav", "flac"]:
+                try:
+                    torchaudio.save(temp_wav, waveform.cpu(), target_sample_rate, bits_per_sample=24)
+                except Exception:
+                    torchaudio.save(temp_wav, waveform.cpu(), target_sample_rate)
+            else:
+                torchaudio.save(temp_wav, waveform.cpu(), target_sample_rate)
 
             if target_format.lower() != "wav":
                 # Convert to target format using pydub
