@@ -29,21 +29,37 @@ An ambitious project to transform low-quality audio (e.g., from Suno) into high-
 
 ## 📦 Installation
 
-1.  **Install `uv`** (the modern Python package manager):
+This project supports both `uv` and `poetry`.
+
+### Option A: Using `uv` (Recommended for speed)
+
+1.  **Install `uv`**:
     ```bash
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
 
-2.  **Clone & Install Dependencies**:
+2.  **Install Dependencies**:
     ```bash
     uv sync
     ```
 
-3.  **Verify Environment**:
-    Check if your system is ready for AI upscaling (detects Python version and CUDA):
+### Option B: Using `poetry`
+
+1.  **Install Dependencies**:
     ```bash
-    uv run check_env.py
+    poetry install
     ```
+
+### Verify Environment
+
+Regardless of the manager used, verify your system is ready (Python 3.10 and CUDA detection):
+```bash
+# Using uv
+uv run check_env.py
+
+# Using poetry
+poetry run python check_env.py
+```
 
 ## 🚀 Getting Started
 
