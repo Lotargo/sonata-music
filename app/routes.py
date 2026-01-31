@@ -89,6 +89,9 @@ def process_track(track_id):
     if not track:
         return jsonify({'error': 'Track not found'}), 404
 
+    if track.status == 'processing':
+        return jsonify({'error': 'Track is already being processed'}), 400
+
     data = request.get_json() or {}
     target_format = data.get('format', 'wav')
     target_sample_rate = int(data.get('sample_rate', 48000))

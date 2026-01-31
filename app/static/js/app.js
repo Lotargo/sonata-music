@@ -164,6 +164,12 @@ document.addEventListener('DOMContentLoaded', () => {
         fileInfo.classList.add('hidden');
         dropZone.classList.remove('hidden');
         startUpload.disabled = true;
+
+        // Reset selectors to defaults
+        document.getElementById('target-format').value = 'mp3';
+        document.getElementById('target-sr').value = '48000';
+        document.getElementById('target-bitrate').value = '320k';
+        bitrateContainer.classList.remove('opacity-30', 'pointer-events-none');
     }
 
     startUpload.onclick = async () => {
