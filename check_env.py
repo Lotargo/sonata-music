@@ -1,6 +1,7 @@
 import torch
 import sys
 import logging
+import os
 
 # Configure logging
 logging.basicConfig(
@@ -18,6 +19,13 @@ def check_environment():
     # Check Python version
     logging.info(f"Python version: {sys.version}")
 
+    # Check matplotlib
+    try:
+        import matplotlib
+        logging.info(f"matplotlib version: {matplotlib.__version__}")
+    except ImportError:
+        logging.error("matplotlib is NOT installed! This is required for AudioSR.")
+
     # Check PyTorch
     try:
         logging.info(f"PyTorch version: {torch.__version__}")
@@ -29,6 +37,17 @@ def check_environment():
             logging.info(f"Device name: {torch.cuda.get_device_name(0)}")
         else:
             logging.warning("CUDA is NOT available. Falling back to CPU. Processing will be slow.")
+            logging.info("Diagnostics:")
+            try:
+                logging.info(f"  torch.version.cuda: {torch.version.cuda}")
+            except:
+                logging.info("  torch.version.cuda: Not available")
+
+            logging.info(f"  torch.backends.cudnn.enabled: {torch.backends.cudnn.enabled}")
+
+            if sys.platform == "win32":
+                logging.info("  NOTE: On Windows, ensure you have installed the CUDA-enabled version of PyTorch.")
+                logging.info("  If using Poetry, ensure check your pyproject.toml has the correct source configured.")
 
     except Exception as e:
         logging.error(f"Error checking PyTorch/CUDA: {e}")
