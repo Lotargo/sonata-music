@@ -48,7 +48,7 @@ def upload_file():
         return jsonify(new_track.to_dict()), 201
     return jsonify({'error': 'File type not allowed'}), 400
 
-def run_upscaling(app, track_id, format, sample_rate, bitrate):
+def run_upscaling(app, track_id, format, sample_rate, bitrate, steps, guidance, seed, batch_size):
     with app.app_context():
         track = db.session.get(Track, track_id)
         if not track:
@@ -72,7 +72,11 @@ def run_upscaling(app, track_id, format, sample_rate, bitrate):
                 output_path,
                 target_format=format,
                 target_sample_rate=sample_rate,
-                target_bitrate=bitrate
+                target_bitrate=bitrate,
+                ddim_steps=steps,
+                guidance_scale=guidance,
+                seed=seed,
+                batch_size=batch_size
             )
 
             track.processed_path = output_path
@@ -97,10 +101,16 @@ def process_track(track_id):
     target_sample_rate = int(data.get('sample_rate', 48000))
     target_bitrate = data.get('bitrate', '320k')
 
+    # New parameters
+    steps = int(data.get('steps', 50))
+    guidance = float(data.get('guidance', 3.5))
+    seed = int(data.get('seed', 42))
+    batch_size = int(data.get('batch_size', 4))
+
     # Start processing in a separate thread
     thread = threading.Thread(
         target=run_upscaling,
-        args=(current_app._get_current_object(), track_id, target_format, target_sample_rate, target_bitrate)
+        args=(current_app._get_current_object(), track_id, target_format, target_sample_rate, target_bitrate, steps, guidance, seed, batch_size)
     )
     thread.start()
 
