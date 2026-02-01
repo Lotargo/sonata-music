@@ -6,8 +6,6 @@ import subprocess
 import traceback
 import tempfile
 import gc
-import queue
-from concurrent.futures import ThreadPoolExecutor
 from audiosr.pipeline import build_model, super_resolution, make_batch_for_super_resolution
 # Explicitly import where we need to patch
 import audiosr.utils
@@ -138,12 +136,14 @@ class UpscalerService:
 
         return matched_waveform
 
-    def _prepare_batch_cpu(self, input_files):
+    def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
-        Runs the CPU-heavy preprocessing (loading, resampling, STFT) for a batch.
-        Returns a dict of tensors (on CPU).
+        Runs super_resolution on a batch of files to maximize GPU usage.
         """
         import audiosr.pipeline as pipeline
+
+        # 1. Prepare batch
+        pipeline.seed_everything(int(seed))
 
         batched_inputs = {
             "waveform": [],
@@ -154,36 +154,28 @@ class UpscalerService:
             "sampling_rate": 48000
         }
 
+        max_duration = 5.12 # Standard for AudioSR
+
         for f in input_files:
+            # make_batch_for_super_resolution returns (batch_dict, duration)
+            # where each item in batch_dict is already unsqueezed [1, ...]
             mini_batch, _ = make_batch_for_super_resolution(f)
+
             for k in batched_inputs.keys():
                 if k != "sampling_rate" and k in mini_batch:
                      batched_inputs[k].append(mini_batch[k])
 
-        # Concatenate tensors
+        # Concatenate
         final_batch = {}
         for k in batched_inputs.keys():
             if k == "sampling_rate":
                 final_batch[k] = batched_inputs[k]
             elif len(batched_inputs[k]) > 0:
                 final_batch[k] = torch.cat(batched_inputs[k], dim=0) # [B, ...]
-                # Keep on CPU
-
-        return final_batch
-
-    def _run_inference_gpu(self, final_batch, ddim_steps, guidance_scale, seed):
-        """
-        Runs the GPU inference on a pre-prepared batch.
-        """
-        import audiosr.pipeline as pipeline
-        pipeline.seed_everything(int(seed))
-        max_duration = 5.12
-
-        # Move to GPU just before inference
-        for k in final_batch.keys():
-            if isinstance(final_batch[k], torch.Tensor):
+                # Move to device
                 final_batch[k] = final_batch[k].to(self.device)
 
+        # 2. Run Inference
         if self.device == "cuda":
              with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
                 with torch.no_grad():
@@ -202,25 +194,14 @@ class UpscalerService:
                     duration=max_duration,
                 )
 
-        # Move back to CPU immediately
-        if isinstance(waveforms, torch.Tensor):
-            waveforms = waveforms.detach().cpu()
-        elif isinstance(waveforms, np.ndarray):
-            # Should not happen usually, but for safety
-            pass
+        return waveforms # [B, 1, samples]
 
-        return waveforms
-
-    def _process_channel_waveform(self, waveform, sr, ddim_steps, guidance_scale, seed, batch_size=4, fixed_norm_scale=None):
+    def _process_channel_waveform(self, waveform, sr, ddim_steps, guidance_scale, seed, batch_size=4):
         """
-        Processes a single-channel waveform using Overlap-Add (OLA) and Pipelined Batching.
+        Processes a single-channel waveform using Overlap-Add (OLA) and Batching.
         """
         # Normalize waveform
-        if fixed_norm_scale is not None:
-            max_val = fixed_norm_scale
-        else:
-            max_val = torch.max(torch.abs(waveform))
-
+        max_val = torch.max(torch.abs(waveform))
         if max_val > 0:
             waveform = waveform / max_val
         else:
@@ -240,7 +221,7 @@ class UpscalerService:
         else:
             num_segments = int(np.ceil((total_samples - segment_length) / stride)) + 1
 
-        logger.info(f"Processing {num_segments} segments (OLA) with batch size {batch_size} (Pipelined)...")
+        logger.info(f"Processing {num_segments} segments (OLA) with batch size {batch_size}...")
 
         # Prepare output buffer and weight buffer
         output_waveform = torch.zeros_like(waveform)
@@ -251,92 +232,83 @@ class UpscalerService:
 
         segments_info = [] # List of (start, end, temp_file_path)
 
-        # ThreadPool for Pipelining
-        # We need 1 worker to prepare the NEXT batch while MAIN thread runs inference on CURRENT batch.
-        executor = ThreadPoolExecutor(max_workers=1)
-
         try:
             # 1. Slice and Save all segments
             for i in range(num_segments):
                 start = i * stride
                 end = start + segment_length
+
+                # Pad if last segment exceeds length
                 segment = waveform[:, start:end]
                 if segment.shape[-1] < segment_length:
                     pad_amt = segment_length - segment.shape[-1]
                     segment = torch.nn.functional.pad(segment, (0, pad_amt))
 
+                # Save to temp
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_seg:
                     temp_seg_path = tmp_seg.name
+
+                # Write
                 sf.write(temp_seg_path, segment.T.numpy(), sr)
                 segments_info.append({"start": start, "end": end, "path": temp_seg_path})
 
-            # 2. Pipelined Processing
-            num_batches = (len(segments_info) + batch_size - 1) // batch_size
+            # 2. Process in Batches
+            for i in range(0, len(segments_info), batch_size):
+                batch_files = [s["path"] for s in segments_info[i : i + batch_size]]
+                logger.info(f"Processing batch {i // batch_size + 1}/{(len(segments_info) + batch_size - 1) // batch_size}")
 
-            # Prepare first batch immediately
-            first_batch_files = [s["path"] for s in segments_info[0 : batch_size]]
-            future_batch = executor.submit(self._prepare_batch_cpu, first_batch_files)
+                try:
+                    # Run batch inference
+                    out_batch = self._batched_super_resolution(batch_files, ddim_steps, guidance_scale, seed)
 
-            for i in range(num_batches):
-                logger.info(f"Processing batch {i + 1}/{num_batches}")
+                    # 3. Overlap-Add
+                    for j, out_tensor in enumerate(out_batch):
+                        idx = i + j
+                        info = segments_info[idx]
+                        start = info["start"]
 
-                # Get current prepared batch (waits if CPU is slow, usually CPU is faster than GPU)
-                current_batch_tensors = future_batch.result()
+                        # Fix: Check for NumPy array first
+                        if isinstance(out_tensor, np.ndarray):
+                            out_tensor = torch.from_numpy(out_tensor)
 
-                # Submit NEXT batch preparation (if exists)
-                next_batch_idx = i + 1
-                if next_batch_idx < num_batches:
-                    start_idx = next_batch_idx * batch_size
-                    end_idx = start_idx + batch_size
-                    next_files = [s["path"] for s in segments_info[start_idx : end_idx]]
-                    future_batch = executor.submit(self._prepare_batch_cpu, next_files)
+                        # out_tensor is [1, samples] or [samples]
+                        if out_tensor.dim() == 2:
+                            out_tensor = out_tensor.squeeze(0)
 
-                # Run Inference on GPU (while CPU is preparing next batch)
-                out_batch = self._run_inference_gpu(current_batch_tensors, ddim_steps, guidance_scale, seed)
+                        # Ensure on CPU
+                        out_tensor = out_tensor.detach().cpu().float()
 
-                # 3. Overlap-Add (CPU)
-                start_segment_idx = i * batch_size
+                        # Apply Window
+                        # Ensure lengths match
+                        if out_tensor.shape[-1] != segment_length:
+                            pass
 
-                for j, out_tensor in enumerate(out_batch):
-                    idx = start_segment_idx + j
-                    if idx >= len(segments_info): break
+                        # If output length differs from window length (e.g. slight rounding in model), trim/pad
+                        if out_tensor.shape[-1] > segment_length:
+                             out_tensor = out_tensor[:segment_length]
+                        elif out_tensor.shape[-1] < segment_length:
+                             out_tensor = torch.nn.functional.pad(out_tensor, (0, segment_length - out_tensor.shape[-1]))
 
-                    info = segments_info[idx]
-                    start = info["start"]
+                        weighted_seg = out_tensor * window.cpu()
 
-                    # Robust type conversion
-                    if isinstance(out_tensor, np.ndarray):
-                        out_tensor = torch.from_numpy(out_tensor)
+                        # Add to buffer
+                        valid_len = min(segment_length, output_waveform.shape[-1] - start)
 
-                    if out_tensor.dim() == 2:
-                        out_tensor = out_tensor.squeeze(0)
+                        output_waveform[:, start : start + valid_len] += weighted_seg[:valid_len]
+                        output_weights[:, start : start + valid_len] += window.cpu()[:valid_len]
 
-                    out_tensor = out_tensor.float().to(waveform.device) # Move to same device as buffers
+                except Exception as e:
+                    logger.error(f"Batch processing failed: {e}")
+                    raise e
 
-                    # Apply Window
-                    if out_tensor.shape[-1] > segment_length:
-                            out_tensor = out_tensor[:segment_length]
-                    elif out_tensor.shape[-1] < segment_length:
-                            out_tensor = torch.nn.functional.pad(out_tensor, (0, segment_length - out_tensor.shape[-1]))
-
-                    weighted_seg = out_tensor * window
-
-                    valid_len = min(segment_length, output_waveform.shape[-1] - start)
-                    output_waveform[:, start : start + valid_len] += weighted_seg[:valid_len]
-                    output_weights[:, start : start + valid_len] += window[:valid_len]
-
-            # 4. Normalize
+            # 4. Normalize by weights
             mask = output_weights > 1e-6
             output_waveform[mask] /= output_weights[mask]
 
             return output_waveform
 
-        except Exception as e:
-            logger.error(f"Pipeline processing failed: {e}")
-            raise e
         finally:
-            executor.shutdown(wait=False)
-            for info in segments_info:
+             for info in segments_info:
                  if os.path.exists(info["path"]):
                      try:
                          os.remove(info["path"])
@@ -390,31 +362,19 @@ class UpscalerService:
                 # Process Mono
                 upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
             elif channels == 2:
-                # Process Stereo - USE MID-SIDE PROCESSING
-                logger.info("Stereo detected. Converting to Mid-Side (M/S)...")
+                # Process Stereo - REVERTED TO LEFT/RIGHT PROCESSING
+                logger.info("Stereo detected. Processing Left Channel...")
+                left_channel = waveform[0:1, :]
+                out_left = self._process_channel_waveform(left_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
 
-                # Encode M/S
-                mid_channel = (waveform[0:1, :] + waveform[1:2, :]) * 0.5
-                side_channel = (waveform[0:1, :] - waveform[1:2, :]) * 0.5
-
-                # Calculate Global Max for Normalization Preservation
-                global_max = max(torch.max(torch.abs(mid_channel)), torch.max(torch.abs(side_channel)))
-                if global_max == 0: global_max = 1.0
-
-                logger.info(f"Processing Mid Channel (Global Max: {global_max:.4f})...")
-                out_mid = self._process_channel_waveform(mid_channel, sr, ddim_steps, guidance_scale, seed, batch_size, fixed_norm_scale=global_max)
-
-                logger.info("Processing Side Channel...")
-                out_side = self._process_channel_waveform(side_channel, sr, ddim_steps, guidance_scale, seed, batch_size, fixed_norm_scale=global_max)
+                logger.info("Stereo detected. Processing Right Channel...")
+                right_channel = waveform[1:2, :]
+                out_right = self._process_channel_waveform(right_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
 
                 # Combine
-                min_len = min(out_mid.shape[-1], out_side.shape[-1])
-                out_mid = out_mid[..., :min_len]
-                out_side = out_side[..., :min_len]
-
-                # Decode M/S
-                out_left = out_mid + out_side
-                out_right = out_mid - out_side
+                min_len = min(out_left.shape[-1], out_right.shape[-1])
+                out_left = out_left[..., :min_len]
+                out_right = out_right[..., :min_len]
 
                 upscaled_waveform = torch.cat([out_left, out_right], dim=0)
             else:
@@ -434,7 +394,7 @@ class UpscalerService:
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
 
-            # --- FIX: Restore temp_wav initialization ---
+            # Temporary wav file if we need to convert or if saving to WAV
             if target_format.lower() == "wav":
                 temp_wav = output_path
             else:
