@@ -102,7 +102,7 @@ def process_track(track_id):
     target_bitrate = data.get('bitrate', '320k')
     
     # New parameters
-    steps = int(data.get('steps', 50))
+    steps = int(data.get('steps', 25))
     guidance = float(data.get('guidance', 3.5))
     seed = int(data.get('seed', 42))
     batch_size = int(data.get('batch_size', 4))
