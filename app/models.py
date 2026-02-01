@@ -1,3 +1,4 @@
+import os
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy.orm import DeclarativeBase
@@ -35,7 +36,7 @@ class Track(db.Model):
             'status': self.status,
             'created_at': self.created_at.isoformat(),
             'original_path': self.original_path,
-            'processed_path': self.processed_path,
+            'processed_path': os.path.basename(self.processed_path) if self.processed_path else None,
             'target_format': self.target_format,
             'target_sample_rate': self.target_sample_rate,
             'target_bitrate': self.target_bitrate
