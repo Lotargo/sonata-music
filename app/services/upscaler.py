@@ -19,24 +19,18 @@ logger = logging.getLogger(__name__)
 
 # Monkey-patch audiosr.utils.read_wav_file to be more robust
 def safe_read_wav_file(filename):
+    # Strictly use soundfile to avoid libtorchcodec issues
     try:
-        # Try explicit backend first to avoid torchcodec issues
-        waveform, sr = torchaudio.load(filename, backend="soundfile")
+        data, sr = sf.read(filename)
+        # soundfile returns (samples, channels) or (samples,)
+        if data.ndim == 1:
+            data = data[None, :]
+        else:
+            data = data.T  # Convert to (channels, samples)
+        waveform = torch.from_numpy(data).float()
     except Exception as e:
-        logger.warning(f"torchaudio.load with backend='soundfile' failed: {e}. Trying fallback to sf.read.")
-        try:
-            # Fallback to soundfile directly
-            data, sr = sf.read(filename)
-            # soundfile returns (samples, channels) or (samples,)
-            if data.ndim == 1:
-                data = data[None, :]
-            else:
-                data = data.T  # Convert to (channels, samples)
-            waveform = torch.from_numpy(data).float()
-        except Exception as e2:
-            logger.error(f"Fallback to sf.read also failed: {e2}")
-            # Try default torchaudio.load as last resort (might trigger the original error)
-            waveform, sr = torchaudio.load(filename)
+        logger.error(f"sf.read failed in safe_read_wav_file: {e}")
+        raise e
 
     duration = waveform.size(-1) / sr
 
@@ -115,14 +109,17 @@ class UpscalerService:
         temp_wav = None
         temp_segments = []
         try:
-            # Read file (using our safe reader logic or similar)
+            # Read file using soundfile
             try:
-                waveform, sr = torchaudio.load(input_path, backend="soundfile")
-            except:
                 data, sr = sf.read(input_path)
-                if data.ndim == 1: data = data[None, :]
-                else: data = data.T
+                if data.ndim == 1:
+                    data = data[None, :]
+                else:
+                    data = data.T # Convert to [channels, samples]
                 waveform = torch.from_numpy(data).float()
+            except Exception as e:
+                logger.error(f"Failed to read input file with sf.read: {e}")
+                raise e
             
             logger.info(f"Loaded waveform shape: {waveform.shape}, sr: {sr}")
 
@@ -169,15 +166,12 @@ class UpscalerService:
 
                 temp_segments.append(temp_seg_path)
                 try:
-                    # Use soundfile directly to avoid torchaudio backend issues
+                    # Use soundfile directly
                     # segment is [channels, samples], sf.write expects [samples, channels]
                     sf.write(temp_seg_path, segment.T.numpy(), sr)
                 except Exception as e:
-                    logger.warning(f"sf.write failed: {e}. Trying torchaudio.save fallback.")
-                    try:
-                         torchaudio.save(temp_seg_path, segment, sr, backend="soundfile")
-                    except:
-                         torchaudio.save(temp_seg_path, segment, sr)
+                    logger.error(f"sf.write failed for segment {i}: {e}")
+                    raise e
 
                 logger.info(f"Processing segment {i+1}/{num_segments} ({original_length} samples)")
 
@@ -248,16 +242,20 @@ class UpscalerService:
                     # waveform is [channels, samples]
                     sf.write(temp_wav, waveform.T.numpy(), target_sample_rate, subtype='PCM_24')
                 except Exception as e:
-                    logger.warning(f"Failed to save 24-bit with sf, falling back to torchaudio: {e}")
+                    logger.error(f"Failed to save 24-bit with sf: {e}")
+                    # Fallback to 16-bit (PCM_16) if 24-bit fails
                     try:
-                        torchaudio.save(temp_wav, waveform, target_sample_rate, bits_per_sample=24, backend="soundfile")
-                    except:
-                         torchaudio.save(temp_wav, waveform, target_sample_rate)
+                        logger.warning("Falling back to 16-bit WAV...")
+                        sf.write(temp_wav, waveform.T.numpy(), target_sample_rate, subtype='PCM_16')
+                    except Exception as e2:
+                        logger.error(f"Failed to save 16-bit with sf: {e2}")
+                        raise e2
             else:
                 try:
                     sf.write(temp_wav, waveform.T.numpy(), target_sample_rate)
-                except:
-                    torchaudio.save(temp_wav, waveform, target_sample_rate)
+                except Exception as e:
+                    logger.error(f"Failed to save temporary WAV with sf: {e}")
+                    raise e
 
             if target_format.lower() != "wav":
                 if not self.ffmpeg_available:
