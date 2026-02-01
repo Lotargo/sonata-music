@@ -63,7 +63,12 @@ def run_upscaling(app, track_id, format, sample_rate, bitrate, steps, guidance, 
         try:
             # Generate output filename
             base, _ = os.path.splitext(track.filename)
-            suffix = "_dsp" if mode == "dsp" else "_ai"
+            if mode == "dsp":
+                suffix = "_dsp"
+            elif mode == "hybrid":
+                suffix = "_hybrid"
+            else:
+                suffix = "_ai"
             output_filename = f"{base}{suffix}.{format}"
             output_path = os.path.join(current_app.config['PROCESSED_FOLDER'], output_filename)
 

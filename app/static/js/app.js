@@ -38,6 +38,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Mode Selector
     const modeAiBtn = document.getElementById('mode-ai');
     const modeDspBtn = document.getElementById('mode-dsp');
+    const modeHybridBtn = document.getElementById('mode-hybrid');
     const processingModeInput = document.getElementById('processing-mode');
     const modeDesc = document.getElementById('mode-desc');
     const aiSettings = document.getElementById('ai-settings');
@@ -178,30 +179,35 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Mode Switching Logic
-    if (modeAiBtn && modeDspBtn) {
+    if (modeAiBtn && modeDspBtn && modeHybridBtn) {
         modeAiBtn.onclick = () => setMode('ai');
         modeDspBtn.onclick = () => setMode('dsp');
+        modeHybridBtn.onclick = () => setMode('hybrid');
     }
 
     function setMode(mode) {
         processingModeInput.value = mode;
+
+        // Reset all buttons
+        [modeAiBtn, modeDspBtn, modeHybridBtn].forEach(btn => {
+            btn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+            btn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
+        });
+
+        // Activate selected
+        const activeBtn = mode === 'ai' ? modeAiBtn : (mode === 'dsp' ? modeDspBtn : modeHybridBtn);
+        activeBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+        activeBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
+
         if (mode === 'ai') {
-            modeAiBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
-            modeAiBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
-
-            modeDspBtn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
-            modeDspBtn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
-
             aiSettings.classList.remove('hidden');
             dspSettings.classList.add('hidden');
             modeDesc.textContent = "Uses AudioSR AI to hallucinate missing high frequencies. Best for low-quality sources.";
+        } else if (mode === 'hybrid') {
+             aiSettings.classList.add('hidden');
+             dspSettings.classList.remove('hidden'); // Hybrid uses DSP settings
+             modeDesc.textContent = "Separates vocals/instruments, cleans harshness, and polishes each part individually. Best for distorted/complex tracks.";
         } else {
-            modeDspBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
-            modeDspBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
-
-            modeAiBtn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
-            modeAiBtn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
-
             dspSettings.classList.remove('hidden');
             aiSettings.classList.add('hidden');
             modeDesc.textContent = "Uses professional DSP chain (EQ, Compression, Limiter) to polish audio without AI generation. Best for good sources.";
@@ -449,7 +455,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dsp_preset: dspPresetVal
             };
 
-            if (mode === 'dsp') {
+            if (mode === 'dsp' || mode === 'hybrid') {
                 // Merge params into payload
                 Object.assign(payload, dspParams);
             }

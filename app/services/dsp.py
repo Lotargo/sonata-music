@@ -198,5 +198,128 @@ class StudioDSP:
             logger.error(f"DSP processing failed: {e}")
             raise e
 
+    def process_stems(self, stems_map, output_path, params=None, sample_rate=48000):
+        """
+        Process separated stems individually and recombine.
+        stems_map: {'vocals': path, 'drums': path, 'bass': path, 'other': path}
+        """
+        logger.info(f"Starting Hybrid Stem Processing. Params: {params}")
+
+        try:
+            # Load stems
+            loaded_stems = {}
+            max_len = 0
+
+            for name, path in stems_map.items():
+                data, sr = sf.read(path)
+                # Resample if needed
+                if sr != sample_rate:
+                    data = data.T # resampy expects (channels, samples) usually, but check dims
+                    # sf reads as (samples, channels)
+                    # resampy.resample(x, sr_orig, sr_new, axis=-1)
+                    if data.ndim == 1:
+                        data = data[np.newaxis, :]
+                    else:
+                        data = data.T # Now (channels, samples)
+
+                    data = resampy.resample(data, sr, sample_rate, axis=1)
+                else:
+                    if data.ndim == 1:
+                        data = data[np.newaxis, :]
+                    else:
+                        data = data.T # (channels, samples)
+
+                data = data.astype(np.float32)
+                loaded_stems[name] = data
+                if data.shape[1] > max_len:
+                    max_len = data.shape[1]
+
+            # Pad all to max_len
+            for name in loaded_stems:
+                curr = loaded_stems[name]
+                if curr.shape[1] < max_len:
+                    pad = np.zeros((curr.shape[0], max_len - curr.shape[1]), dtype=np.float32)
+                    loaded_stems[name] = np.concatenate([curr, pad], axis=1)
+
+            # --- Define Chains ---
+
+            # 1. Vocals Chain: Clear up harshness, add air, gentle compression
+            vocals_board = Pedalboard()
+            vocals_board.append(HighpassFilter(cutoff_frequency_hz=90)) # Cut rumble
+            # Cut harshness in 3-4kHz range (common in Suno/AI)
+            vocals_board.append(PeakFilter(cutoff_frequency_hz=3500, gain_db=-2.5, q=1.5))
+            # Gentle Air boost
+            vocals_board.append(HighShelfFilter(cutoff_frequency_hz=12000, gain_db=1.5))
+            # Vocal Compressor (Fast attack to catch peaks)
+            vocals_board.append(Compressor(threshold_db=-16, ratio=2.5, attack_ms=5, release_ms=100))
+
+            # 2. Drums/Bass Chain: Punch and Depth
+            rhythm_board = Pedalboard()
+            bass_boost = params.get('bass_boost', 0.0) if params else 0.0
+            if bass_boost != 0:
+                rhythm_board.append(LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost))
+            # Gentle saturation for warmth
+            # rhythm_board.append(Distortion(drive_db=1.0))
+
+            # 3. Other (Synths) Chain: Width
+            # (Handled via widener function usually, but we can do simple EQ here)
+            other_board = Pedalboard()
+            other_board.append(HighpassFilter(cutoff_frequency_hz=150)) # Clean space for bass
+
+            # --- Process ---
+
+            # Process Vocals
+            if 'vocals' in loaded_stems:
+                loaded_stems['vocals'] = vocals_board(loaded_stems['vocals'], sample_rate)
+
+            # Process Drums
+            if 'drums' in loaded_stems:
+                loaded_stems['drums'] = rhythm_board(loaded_stems['drums'], sample_rate)
+
+            # Process Bass
+            if 'bass' in loaded_stems:
+                 loaded_stems['bass'] = rhythm_board(loaded_stems['bass'], sample_rate)
+
+            # Process Other
+            if 'other' in loaded_stems:
+                 loaded_stems['other'] = other_board(loaded_stems['other'], sample_rate)
+                 # Widen 'other' specifically
+                 loaded_stems['other'] = self._apply_stereo_width(loaded_stems['other'], 1.2)
+
+            # --- Mix ---
+            # Simple summation
+            mix = np.zeros((2, max_len), dtype=np.float32)
+            for name, audio in loaded_stems.items():
+                # Ensure stereo
+                if audio.shape[0] == 1:
+                    audio = np.concatenate([audio, audio], axis=0)
+                mix += audio
+
+            # Apply Master Glue (The "Balanced" chain we just fixed)
+            # Use provided params or default to mastering
+            master_config = self.preset_configs["mastering"].copy()
+            if params:
+                for k,v in params.items():
+                    if v is not None:
+                        master_config[k] = v
+
+            # Remove bass boost from master since we applied it to stems
+            master_config['bass_boost'] = 0.0
+
+            master_board = self.build_chain(master_config)
+            final_mix = master_board(mix, sample_rate)
+
+            # Save
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
+
+            sf.write(output_path, final_mix.T, sample_rate, subtype='PCM_24')
+            return True
+
+        except Exception as e:
+            logger.error(f"Hybrid stem processing failed: {e}")
+            raise e
+
 # Create singleton
 dsp = StudioDSP()
