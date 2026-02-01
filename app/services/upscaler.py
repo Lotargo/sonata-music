@@ -89,9 +89,9 @@ class UpscalerService:
                 self.model = build_model(model_name="basic", device=self.device)
                 
                 # Apply FP16 quantization if on CUDA
-                if self.device == "cuda":
-                    logger.info("Converting model to FP16 for speedup on CUDA.")
-                    self.model = self.model.half()
+                # if self.device == "cuda":
+                #     logger.info("Converting model to FP16 for speedup on CUDA.")
+                #     self.model = self.model.half()
                 
                 logger.info("AudioSR model loaded successfully.")
             except Exception as e:
@@ -151,9 +151,9 @@ class UpscalerService:
             samples_per_segment = int(segment_length * sr)
             total_samples = waveform.shape[-1]
             num_segments = int(np.ceil(total_samples / samples_per_segment))
-
-            processed_segments = []
             
+            processed_segments = []
+
             logger.info(f"Processing {num_segments} segments sequentially...")
 
             for i in range(num_segments):
@@ -182,23 +182,14 @@ class UpscalerService:
                 logger.info(f"Processing segment {i+1}/{num_segments} ({original_length} samples)")
 
                 # Call super_resolution
-                if self.device == "cuda":
-                     with torch.autocast(device_type="cuda", dtype=torch.float16):
-                         out_seg = super_resolution(
-                            self.model,
-                            temp_seg_path,
-                            seed=seed,
-                            ddim_steps=ddim_steps,
-                            guidance_scale=guidance_scale
-                        )
-                else:
-                    out_seg = super_resolution(
-                        self.model,
-                        temp_seg_path,
-                        seed=seed,
-                        ddim_steps=ddim_steps,
-                        guidance_scale=guidance_scale
-                    )
+                # Note: FP16/autocast disabled to prevent numerical instability (NaNs/Infs)
+                out_seg = super_resolution(
+                    self.model,
+                    temp_seg_path,
+                    seed=seed,
+                    ddim_steps=ddim_steps,
+                    guidance_scale=guidance_scale
+                )
                 
                 # out_seg is likely on CPU or GPU? Detach and move to CPU immediately
                 out_seg = out_seg.detach().cpu().float()
@@ -210,7 +201,7 @@ class UpscalerService:
                      logger.warning(f"Output segment shorter than input: {out_seg.shape} vs {segment.shape}")
                 
                 processed_segments.append(out_seg)
-                
+
                 # Clean up temp file
                 if os.path.exists(temp_seg_path):
                     os.remove(temp_seg_path)
