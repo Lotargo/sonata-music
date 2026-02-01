@@ -14,6 +14,7 @@ import soundfile as sf
 import numpy as np
 from pydub import AudioSegment
 from app.services.dsp import dsp
+from app.services.separator import separator
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -364,7 +365,7 @@ class UpscalerService:
                       dsp_preset="mastering", dsp_params=None):
         """
         Upscale/Process the audio file at input_path and save to output_path.
-        Modes: 'ai' (AudioSR) or 'dsp' (Studio DSP).
+        Modes: 'ai' (AudioSR), 'dsp' (Studio DSP), or 'hybrid' (Stem Separation + DSP).
         """
         try:
             logger.info(f"Starting processing ({mode}): {input_path} -> {output_path}")
@@ -384,6 +385,36 @@ class UpscalerService:
                 dsp.process(input_path, temp_wav, preset_name=dsp_preset, params=dsp_params, sample_rate=target_sample_rate)
 
                 # Convert to target format if needed
+                if target_format.lower() != "wav":
+                    if not self.ffmpeg_available:
+                        logger.error("FFmpeg not found! Cannot convert to lossy formats.")
+                    else:
+                        self._convert_format(temp_wav, output_path, target_format, target_bitrate)
+                        # Cleanup temp
+                        if os.path.exists(temp_wav) and temp_wav != output_path:
+                            os.remove(temp_wav)
+
+                return True
+
+            # --- HYBRID MODE (Demucs + DSP) ---
+            if mode == "hybrid":
+                # 1. Determine temp output
+                if target_format.lower() == "wav":
+                    temp_wav = output_path
+                else:
+                    temp_wav = output_path + ".tmp.wav"
+
+                # 2. Separate Stems
+                # Create a temp dir for stems
+                with tempfile.TemporaryDirectory() as stem_dir:
+                    logger.info(f"Separating stems into {stem_dir}...")
+                    stems_map = separator.separate_track(input_path, stem_dir)
+
+                    # 3. Process Stems & Mix
+                    logger.info("Processing and mixing stems...")
+                    dsp.process_stems(stems_map, temp_wav, params=dsp_params, sample_rate=target_sample_rate)
+
+                # 4. Convert format if needed
                 if target_format.lower() != "wav":
                     if not self.ffmpeg_available:
                         logger.error("FFmpeg not found! Cannot convert to lossy formats.")
