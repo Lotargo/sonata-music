@@ -62,6 +62,7 @@ dependencies = [
     { name = "pydub" },
     { name = "scipy" },
     { name = "setuptools" },
+    { name = "soundfile" },
     { name = "torch" },
     { name = "torchaudio" },
 ]
@@ -76,6 +77,7 @@ requires-dist = [
     { name = "pydub", specifier = ">=0.25.1" },
     { name = "scipy", specifier = ">=1.15.3" },
     { name = "setuptools", specifier = ">=80.10.2" },
+    { name = "soundfile", specifier = ">=0.12.1" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "torchaudio", specifier = ">=2.10.0" },
 ]
