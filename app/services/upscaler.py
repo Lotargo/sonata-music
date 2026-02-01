@@ -232,6 +232,10 @@ class UpscalerService:
                         info = segments_info[idx]
                         start = info["start"]
 
+                        # Fix: Check for NumPy array first
+                        if isinstance(out_tensor, np.ndarray):
+                            out_tensor = torch.from_numpy(out_tensor)
+
                         # out_tensor is [1, samples] or [samples]
                         if out_tensor.dim() == 2:
                             out_tensor = out_tensor.squeeze(0)
