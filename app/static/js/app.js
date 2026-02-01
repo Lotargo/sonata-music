@@ -44,6 +44,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const dspSettings = document.getElementById('dsp-settings');
     const dspPreset = document.getElementById('dsp-preset');
 
+    // DSP Advanced Controls
+    const toggleDspAdvanced = document.getElementById('toggle-dsp-advanced');
+    const dspAdvanced = document.getElementById('dsp-advanced');
+    const stereoWidth = document.getElementById('stereo-width');
+    const bassBoost = document.getElementById('bass-boost');
+    const voiceClarity = document.getElementById('voice-clarity');
+    const compressorAmount = document.getElementById('compressor-amount');
+    const reverbEnabled = document.getElementById('reverb-enabled');
+    const reverbSize = document.getElementById('reverb-size');
+    const reverbAmount = document.getElementById('reverb-amount');
+    const reverbControls = document.getElementById('reverb-controls');
+
+    // Value Labels
+    const valStereo = document.getElementById('val-stereo');
+    const valBass = document.getElementById('val-bass');
+    const valClarity = document.getElementById('val-clarity');
+    const valComp = document.getElementById('val-comp');
+    const valRevSize = document.getElementById('val-rev-size');
+    const valRevMix = document.getElementById('val-rev-mix');
+
     // Initialize Wavesurfer
     wavesurfer = WaveSurfer.create({
         container: '#waveform',
@@ -93,6 +113,67 @@ document.addEventListener('DOMContentLoaded', () => {
                 guidanceScale.classList.remove('opacity-50');
             }
             guidanceValue.textContent = guidanceScale.value;
+        };
+    }
+
+    // DSP Advanced Logic
+    if (toggleDspAdvanced) {
+        toggleDspAdvanced.onclick = () => {
+            dspAdvanced.classList.toggle('hidden');
+            const icon = toggleDspAdvanced.querySelector('svg');
+            // Assuming icon rotation or change, but for now just toggle visibility
+        };
+    }
+
+    if (reverbEnabled) {
+        reverbEnabled.onchange = () => {
+            if (reverbEnabled.checked) {
+                reverbControls.classList.remove('opacity-50', 'pointer-events-none');
+            } else {
+                reverbControls.classList.add('opacity-50', 'pointer-events-none');
+            }
+        };
+    }
+
+    // Slider updates
+    const updateLabel = (slider, label, unit = '') => {
+        if (!slider || !label) return;
+        slider.oninput = () => {
+            label.textContent = slider.value + unit;
+        };
+    };
+
+    updateLabel(stereoWidth, valStereo, '%');
+    updateLabel(bassBoost, valBass, 'dB');
+    updateLabel(voiceClarity, valClarity);
+    updateLabel(compressorAmount, valComp, '%');
+    updateLabel(reverbSize, valRevSize, '%');
+    updateLabel(reverbAmount, valRevMix, '%');
+
+    // Preset Logic
+    const dspPresets = {
+        "mastering": { stereo: 100, bass: 0, clarity: 0, comp: 50, rev: false },
+        "clear": { stereo: 110, bass: -2, clarity: 5, comp: 40, rev: false },
+        "warm": { stereo: 90, bass: 2, clarity: -1, comp: 60, rev: true, revSize: 30, revMix: 10 },
+        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false }
+    };
+
+    if (dspPreset) {
+        dspPreset.onchange = () => {
+            const config = dspPresets[dspPreset.value];
+            if (config) {
+                stereoWidth.value = config.stereo; valStereo.textContent = config.stereo + '%';
+                bassBoost.value = config.bass; valBass.textContent = config.bass + 'dB';
+                voiceClarity.value = config.clarity; valClarity.textContent = config.clarity;
+                compressorAmount.value = config.comp; valComp.textContent = config.comp + '%';
+                reverbEnabled.checked = config.rev;
+                reverbEnabled.onchange(); // trigger UI update
+
+                if (config.rev) {
+                     reverbSize.value = config.revSize || 50; valRevSize.textContent = reverbSize.value + '%';
+                     reverbAmount.value = config.revMix || 30; valRevMix.textContent = reverbAmount.value + '%';
+                }
+            }
         };
     }
 
@@ -305,19 +386,37 @@ document.addEventListener('DOMContentLoaded', () => {
         const mode = document.getElementById('processing-mode').value;
         const dspPresetVal = document.getElementById('dsp-preset').value;
 
+        // DSP Params
+        const dspParams = {
+            stereo_width: parseInt(stereoWidth.value) / 100, // 0-2 scale
+            bass_boost: parseFloat(bassBoost.value),
+            voice_clarity: parseFloat(voiceClarity.value),
+            compressor_amount: parseInt(compressorAmount.value) / 100, // 0-1 scale
+            reverb_enabled: reverbEnabled.checked,
+            reverb_size: parseInt(reverbSize.value) / 100,
+            reverb_amount: parseInt(reverbAmount.value) / 100
+        };
+
         try {
+            const payload = {
+                format,
+                sample_rate: sr,
+                bitrate: bitrate,
+                steps: steps,
+                guidance: guidance,
+                mode: mode,
+                dsp_preset: dspPresetVal
+            };
+
+            if (mode === 'dsp') {
+                // Merge params into payload
+                Object.assign(payload, dspParams);
+            }
+
             const response = await fetch(`/process/${id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    format,
-                    sample_rate: sr,
-                    bitrate: bitrate,
-                    steps: steps,
-                    guidance: guidance,
-                    mode: mode,
-                    dsp_preset: dspPresetVal
-                })
+                body: JSON.stringify(payload)
             });
 
             if (response.ok) {

@@ -336,7 +336,7 @@ class UpscalerService:
 
     def process_track(self, input_path, output_path, mode="ai", ddim_steps=50, guidance_scale=3.5, seed=42,
                       target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=2,
-                      dsp_preset="mastering"):
+                      dsp_preset="mastering", dsp_params=None):
         """
         Upscale/Process the audio file at input_path and save to output_path.
         Modes: 'ai' (AudioSR) or 'dsp' (Studio DSP).
@@ -356,7 +356,7 @@ class UpscalerService:
 
                 # Run DSP
                 # dsp.process handles resampling and effect chain
-                dsp.process(input_path, temp_wav, preset_name=dsp_preset, sample_rate=target_sample_rate)
+                dsp.process(input_path, temp_wav, preset_name=dsp_preset, params=dsp_params, sample_rate=target_sample_rate)
 
                 # Convert to target format if needed
                 if target_format.lower() != "wav":

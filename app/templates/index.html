@@ -116,13 +116,84 @@
 
                 <!-- DSP Settings -->
                 <div id="dsp-settings" class="hidden mb-6">
-                    <label class="block text-sm font-medium text-slate-400 mb-2">DSP Preset</label>
-                    <select id="dsp-preset" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                    <div class="flex justify-between items-center mb-2">
+                         <label class="block text-sm font-medium text-slate-400">DSP Preset</label>
+                         <button id="toggle-dsp-advanced" class="text-xs text-indigo-400 hover:text-indigo-300 font-bold flex items-center gap-1">
+                             Advanced Settings <i data-lucide="chevron-down" class="w-3 h-3"></i>
+                         </button>
+                    </div>
+                    <select id="dsp-preset" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 mb-4">
                         <option value="mastering" selected>Mastering (Balanced)</option>
                         <option value="clear">Clear (Vocal Focus)</option>
                         <option value="warm">Warm (Vintage/Tube)</option>
                         <option value="punchy">Punchy (Drums/Bass)</option>
                     </select>
+
+                    <div id="dsp-advanced" class="hidden space-y-4 p-4 bg-slate-800/50 rounded-lg border border-white/5">
+
+                        <!-- Stereo -->
+                        <div>
+                             <div class="flex justify-between mb-1">
+                                <label class="text-xs font-medium text-slate-400">Stereo Width</label>
+                                <span id="val-stereo" class="text-xs font-mono text-slate-500">100%</span>
+                             </div>
+                             <input type="range" id="stereo-width" min="0" max="200" step="5" value="100" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                        </div>
+
+                        <!-- EQ -->
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                 <div class="flex justify-between mb-1">
+                                    <label class="text-xs font-medium text-slate-400">Bass Boost</label>
+                                    <span id="val-bass" class="text-xs font-mono text-slate-500">0dB</span>
+                                 </div>
+                                 <input type="range" id="bass-boost" min="-10" max="10" step="0.5" value="0" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                            </div>
+                            <div>
+                                 <div class="flex justify-between mb-1">
+                                    <label class="text-xs font-medium text-slate-400">Voice Clarity</label>
+                                    <span id="val-clarity" class="text-xs font-mono text-slate-500">0</span>
+                                 </div>
+                                 <input type="range" id="voice-clarity" min="-5" max="10" step="0.5" value="0" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                            </div>
+                        </div>
+
+                        <!-- Compressor -->
+                        <div>
+                             <div class="flex justify-between mb-1">
+                                <label class="text-xs font-medium text-slate-400">Compressor Amount</label>
+                                <span id="val-comp" class="text-xs font-mono text-slate-500">50%</span>
+                             </div>
+                             <input type="range" id="compressor-amount" min="0" max="100" step="5" value="50" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                        </div>
+
+                        <!-- Reverb -->
+                        <div class="border-t border-white/10 pt-3">
+                            <div class="flex items-center justify-between mb-2">
+                                <label class="text-xs font-medium text-slate-400 flex items-center gap-2">
+                                    <input type="checkbox" id="reverb-enabled" class="rounded bg-slate-700 border-slate-600 text-indigo-500 focus:ring-0">
+                                    Add Reverb
+                                </label>
+                            </div>
+                            <div id="reverb-controls" class="grid grid-cols-2 gap-4 opacity-50 pointer-events-none transition">
+                                <div>
+                                     <div class="flex justify-between mb-1">
+                                        <label class="text-[10px] font-medium text-slate-500">Size</label>
+                                        <span id="val-rev-size" class="text-[10px] font-mono text-slate-600">50%</span>
+                                     </div>
+                                     <input type="range" id="reverb-size" min="0" max="100" step="5" value="50" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                                </div>
+                                <div>
+                                     <div class="flex justify-between mb-1">
+                                        <label class="text-[10px] font-medium text-slate-500">Mix</label>
+                                        <span id="val-rev-mix" class="text-[10px] font-mono text-slate-600">30%</span>
+                                     </div>
+                                     <input type="range" id="reverb-amount" min="0" max="100" step="5" value="30" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500">
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
 
                 <div class="grid grid-cols-3 gap-4 mb-6">

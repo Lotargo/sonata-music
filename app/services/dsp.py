@@ -9,123 +9,178 @@ from pedalboard import (
     Limiter,
     HighpassFilter,
     HighShelfFilter,
+    LowShelfFilter,
     PeakFilter,
     Gain,
     NoiseGate,
-    Distortion
+    Distortion,
+    Reverb
 )
 
 logger = logging.getLogger(__name__)
 
 class StudioDSP:
     def __init__(self):
-        self.presets = {
-            "mastering": self._build_mastering_chain,
-            "clear": self._build_clear_chain,
-            "warm": self._build_warm_chain,
-            "punchy": self._build_punchy_chain
+        # Define default parameter sets for presets
+        self.preset_configs = {
+            "mastering": {
+                "reverb_enabled": False,
+                "bass_boost": 0.0,
+                "voice_clarity": 0.0,
+                "compressor_amount": 0.5, # 0-1 scale
+                "stereo_width": 1.0,
+                "target_lufs": -14.0
+            },
+            "punchy": {
+                "reverb_enabled": False,
+                "bass_boost": 4.0,
+                "voice_clarity": 2.0,
+                "compressor_amount": 0.8,
+                "stereo_width": 1.0,
+                "target_lufs": -9.0
+            },
+            "clear": {
+                "reverb_enabled": False,
+                "bass_boost": -2.0,
+                "voice_clarity": 5.0,
+                "compressor_amount": 0.4,
+                "stereo_width": 1.1,
+                "target_lufs": -14.0
+            },
+            "warm": {
+                "reverb_enabled": True,
+                "reverb_size": 0.3,
+                "reverb_amount": 0.1,
+                "bass_boost": 2.0,
+                "voice_clarity": -1.0,
+                "compressor_amount": 0.6,
+                "stereo_width": 0.9,
+                "target_lufs": -14.0
+            }
         }
 
-    def _build_mastering_chain(self):
-        """Standard professional mastering chain."""
-        return Pedalboard([
-            HighpassFilter(cutoff_frequency_hz=30),
-            # "Exciter" - boost air
-            HighShelfFilter(cutoff_frequency_hz=10000, gain_db=2.0),
-            # Compressor to glue (transparent)
-            Compressor(threshold_db=-12, ratio=2.5, attack_ms=10, release_ms=100),
-            # Limiter for safety
-            Limiter(threshold_db=-0.1)
-        ])
+    def _apply_stereo_width(self, audio, width):
+        """
+        Apply Mid-Side stereo widening using NumPy.
+        Audio is (channels, samples).
+        """
+        if audio.shape[0] != 2:
+            return audio # Cannot widen mono
 
-    def _build_clear_chain(self):
-        """Focus on clarity, vocal presence, and de-mudding."""
-        return Pedalboard([
-            HighpassFilter(cutoff_frequency_hz=50),
+        # 1 = Normal, <1 = Narrow, >1 = Wide
+        if width == 1.0:
+            return audio
+
+        mid = (audio[0] + audio[1]) * 0.5
+        side = (audio[0] - audio[1]) * 0.5
+
+        side *= width
+
+        left = mid + side
+        right = mid - side
+
+        return np.stack([left, right])
+
+    def build_chain(self, params):
+        board = Pedalboard()
+
+        # 1. Cleanup Highpass
+        board.append(HighpassFilter(cutoff_frequency_hz=30))
+
+        # 2. EQ: Bass Boost
+        bass_db = params.get("bass_boost", 0.0)
+        if bass_db != 0:
+            board.append(LowShelfFilter(cutoff_frequency_hz=100, gain_db=bass_db))
+
+        # 3. EQ: Voice Clarity
+        # Combination of cut in mud (300Hz) and boost in presence (3-5kHz)
+        clarity = params.get("voice_clarity", 0.0)
+        if clarity != 0:
+            # "Clarity" is an abstract 0-10 or dB scale? Let's assume input is roughly dB-like or 0-5 scale.
             # Cut mud
-            PeakFilter(cutoff_frequency_hz=300, gain_db=-2.5, q=1.0),
+            board.append(PeakFilter(cutoff_frequency_hz=300, gain_db=-(clarity * 0.5), q=1.0))
             # Boost presence
-            PeakFilter(cutoff_frequency_hz=3000, gain_db=2.0, q=0.7),
-            HighShelfFilter(cutoff_frequency_hz=8000, gain_db=3.0),
-            Compressor(threshold_db=-15, ratio=3, attack_ms=5, release_ms=50),
-            Limiter(threshold_db=-0.1)
-        ])
+            board.append(PeakFilter(cutoff_frequency_hz=4000, gain_db=clarity, q=0.7))
+            # Air
+            board.append(HighShelfFilter(cutoff_frequency_hz=10000, gain_db=clarity * 0.5))
 
-    def _build_warm_chain(self):
-        """Vintage vibe, tube distortion, reduced highs."""
-        return Pedalboard([
-            HighpassFilter(cutoff_frequency_hz=30),
-            # Warmth
-            PeakFilter(cutoff_frequency_hz=200, gain_db=2.0, q=0.8),
-            # Soften highs
-            HighShelfFilter(cutoff_frequency_hz=12000, gain_db=-2.0),
-            # Tube-like distortion (very subtle)
-            Distortion(drive_db=5.0),
-            Compressor(threshold_db=-10, ratio=2, attack_ms=20, release_ms=200),
-            Limiter(threshold_db=-0.1)
-        ])
+        # 4. Compressor
+        # Map 0-1 "amount" to Threshold/Ratio
+        comp_amt = params.get("compressor_amount", 0.0)
+        if comp_amt > 0:
+            # Threshold: -10dB to -30dB
+            threshold = -10 - (comp_amt * 20)
+            # Ratio: 2:1 to 8:1
+            ratio = 2 + (comp_amt * 6)
+            board.append(Compressor(threshold_db=threshold, ratio=ratio, attack_ms=10, release_ms=100))
 
-    def _build_punchy_chain(self):
-        """Aggressive, drum-focused, bass-heavy."""
-        return Pedalboard([
-            HighpassFilter(cutoff_frequency_hz=40),
-            # Thump
-            PeakFilter(cutoff_frequency_hz=80, gain_db=3.0, q=1.0),
-            # Snap
-            PeakFilter(cutoff_frequency_hz=4000, gain_db=2.0, q=1.0),
-            # Slow attack to let transients through, high ratio
-            Compressor(threshold_db=-15, ratio=4, attack_ms=30, release_ms=100),
-            Limiter(threshold_db=-0.1)
-        ])
+        # 5. Reverb
+        if params.get("reverb_enabled", False):
+            room_size = params.get("reverb_size", 0.5) # 0-1
+            wet_level = params.get("reverb_amount", 0.3) # 0-1
+            # Pedalboard Reverb: room_size (0-1), wet_level (0-1), dry_level (0-1)
+            board.append(Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0))
 
-    def process(self, input_path, output_path, preset_name="mastering", sample_rate=48000):
-        logger.info(f"Starting DSP processing: {input_path} -> {output_path} (Preset: {preset_name})")
+        # 6. Limiter (Safety)
+        board.append(Limiter(threshold_db=-0.1))
+
+        return board
+
+    def process(self, input_path, output_path, params=None, preset_name="mastering", sample_rate=48000):
+        """
+        Process audio with DSP.
+        params: dict of specific settings. If None, uses preset_name to load defaults.
+        """
+        logger.info(f"Starting DSP processing. Preset: {preset_name}, Params: {params}")
 
         try:
-            # 1. Read Audio
+            # 1. Resolve Parameters
+            # Start with preset defaults
+            config = self.preset_configs.get(preset_name, self.preset_configs["mastering"]).copy()
+            # Overlay custom params if provided
+            if params:
+                for k, v in params.items():
+                    if v is not None:
+                        config[k] = v
+
+            # 2. Read Audio
             try:
                 data, sr = sf.read(input_path)
             except Exception as e:
                 logger.error(f"Failed to read file with sf.read: {e}")
                 raise e
 
-            # Handle shape: sf returns (samples, channels) usually.
-            # Pedalboard expects (channels, samples).
+            # Shape handling: (samples, channels) -> (channels, samples)
             if data.ndim == 1:
-                # Mono: (samples,) -> (1, samples)
                 data = data[np.newaxis, :]
             else:
-                # Stereo: (samples, channels) -> (channels, samples)
                 data = data.T
 
-            # Convert to float32
             audio = data.astype(np.float32)
 
-            # Normalize inputs to prevent clipping before processing if they are crazy loud?
-            # Actually pedalboard works in float32 so headroom is fine.
-            # But let's peak normalize to -3dB to give headroom for EQ boosts.
+            # Pre-gain normalization to roughly -6dB to ensure consistent processing
             max_val = np.max(np.abs(audio))
             if max_val > 0:
-                target_peak = 10 ** (-3.0 / 20) # -3dB
-                if max_val > target_peak:
-                    audio = audio * (target_peak / max_val)
+                 # target -6dB = 0.5
+                 target = 0.5
+                 audio = audio * (target / max_val)
 
-            # 2. Resample if needed
+            # 3. Resample
             if sr != sample_rate:
                 logger.info(f"Resampling from {sr} to {sample_rate} Hz...")
                 audio = resampy.resample(audio, sr, sample_rate, axis=1)
                 sr = sample_rate
 
-            # 3. Get Chain
-            builder = self.presets.get(preset_name, self._build_mastering_chain)
-            board = builder()
+            # 4. Apply Stereo Widener (NumPy)
+            width = float(config.get("stereo_width", 1.0))
+            if width != 1.0:
+                audio = self._apply_stereo_width(audio, width)
 
-            # 4. Process
-            # Board expects (channels, samples) and sample_rate
+            # 5. Apply Pedalboard Chain
+            board = self.build_chain(config)
             processed = board(audio, sample_rate)
 
-            # 5. Save
-            # sf.write expects (samples, channels)
+            # 6. Save
             output_dir = os.path.dirname(output_path)
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
