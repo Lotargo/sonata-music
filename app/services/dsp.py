@@ -184,6 +184,9 @@ class StudioDSP:
             output_dir = os.path.dirname(output_path)
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
+
+            # Determine subtype (no easy way to pass this via params currently without changing signature massively)
+            # Default to 24-bit for internal DSP
             sf.write(output_path, processed.T, sample_rate, subtype='PCM_24')
 
             logger.info("DSP processing complete.")

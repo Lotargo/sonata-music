@@ -277,14 +277,53 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Format change handling
-    targetFormat.onchange = () => {
+    const updateBitrateOptions = () => {
         const format = targetFormat.value;
-        if (format === 'wav' || format === 'flac') {
-            bitrateContainer.classList.add('opacity-30', 'pointer-events-none');
+        const bitrateSelect = document.getElementById('target-bitrate');
+        const bitrateLabel = document.getElementById('bitrate-label');
+
+        bitrateSelect.innerHTML = '';
+        bitrateContainer.classList.remove('opacity-30', 'pointer-events-none'); // Always enable now
+
+        if (format === 'mp3' || format === 'ogg') {
+            bitrateLabel.textContent = 'Bitrate';
+            const options = [
+                { val: '128k', txt: '128 kbps' },
+                { val: '192k', txt: '192 kbps' },
+                { val: '256k', txt: '256 kbps' },
+                { val: '320k', txt: '320 kbps (Max)' }
+            ];
+            if (format === 'ogg') {
+                 options.push({ val: '500k', txt: '500 kbps (High)' });
+            }
+
+            options.forEach(opt => {
+                const el = document.createElement('option');
+                el.value = opt.val;
+                el.textContent = opt.txt;
+                if (opt.val === '320k') el.selected = true;
+                bitrateSelect.appendChild(el);
+            });
         } else {
-            bitrateContainer.classList.remove('opacity-30', 'pointer-events-none');
+            // WAV / FLAC
+            bitrateLabel.textContent = 'Bit Depth';
+            const options = [
+                { val: '16-bit', txt: '16-bit (CD Quality)' },
+                { val: '24-bit', txt: '24-bit (Studio Quality)' },
+                { val: '32-bit', txt: '32-bit Float' }
+            ];
+
+            options.forEach(opt => {
+                const el = document.createElement('option');
+                el.value = opt.val;
+                el.textContent = opt.txt;
+                if (opt.val === '24-bit') el.selected = true;
+                bitrateSelect.appendChild(el);
+            });
         }
     };
+
+    targetFormat.onchange = updateBitrateOptions;
 
     // Upload Functions
     uploadBtn.onclick = () => uploadModal.classList.remove('hidden');
@@ -336,9 +375,11 @@ document.addEventListener('DOMContentLoaded', () => {
         // Reset selectors to defaults
         document.getElementById('target-format').value = 'mp3';
         document.getElementById('target-sr').value = '48000';
-        document.getElementById('target-bitrate').value = '320k';
-        bitrateContainer.classList.remove('opacity-30', 'pointer-events-none');
+        updateBitrateOptions(); // Reset bitrate options
     }
+
+    // Init
+    updateBitrateOptions();
 
     startUpload.onclick = async () => {
         const file = fileInput.files[0];
