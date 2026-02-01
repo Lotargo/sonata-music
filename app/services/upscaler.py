@@ -88,9 +88,9 @@ class UpscalerService:
                 logger.error(f"Failed to load AudioSR model: {e}")
                 raise e
 
-    def _convert_format(self, input_wav, output_path, target_format, bitrate):
+    def _convert_format(self, input_wav, output_path, target_format, bitrate_str):
         """Helper to convert WAV to other formats using pydub."""
-        logger.info(f"Converting to {target_format} using pydub")
+        logger.info(f"Converting to {target_format} (bitrate/depth: {bitrate_str}) using pydub")
         audio = AudioSegment.from_wav(input_wav)
 
         format_map = {
@@ -101,9 +101,34 @@ class UpscalerService:
         }
         out_fmt = format_map.get(target_format.lower(), target_format.lower())
 
+        # Handle Bitrate clamping for lossy formats
         if out_fmt in ['mp3', 'ogg']:
-            audio.export(output_path, format=out_fmt, bitrate=bitrate)
+            # Parse numerical bitrate
+            try:
+                # Remove 'k' and convert to int
+                kbps = int(''.join(filter(str.isdigit, bitrate_str)))
+            except ValueError:
+                kbps = 320 # Default fallback
+
+            # Clamp limits
+            if out_fmt == 'mp3':
+                kbps = min(kbps, 320)
+            elif out_fmt == 'ogg':
+                kbps = min(kbps, 500)
+
+            final_bitrate = f"{kbps}k"
+            logger.info(f"Exporting {out_fmt} with bitrate {final_bitrate}")
+            audio.export(output_path, format=out_fmt, bitrate=final_bitrate)
+
+        elif out_fmt == 'flac':
+             # FLAC is lossless, bitrate arg doesn't apply to compression level directly in pydub/ffmpeg simple interface
+             # We just export as FLAC. Pydub doesn't expose sample_fmt easily for export,
+             # but input was saved as 24-bit WAV if possible, so FLAC should retain high quality.
+             logger.info(f"Exporting {out_fmt} (lossless)")
+             audio.export(output_path, format=out_fmt)
+
         else:
+            # Fallback
             audio.export(output_path, format=out_fmt)
 
     def unload_model(self):
@@ -451,19 +476,22 @@ class UpscalerService:
                 upscaled_waveform = resampler(upscaled_waveform)
                 logger.info(f"Resampled waveform shape: {upscaled_waveform.shape}")
 
+            # Determine subtype based on request (target_bitrate holds '16-bit', '24-bit', etc for WAV/FLAC)
+            subtype = 'PCM_24' # Default high quality
+            if target_bitrate == '16-bit':
+                subtype = 'PCM_16'
+            elif target_bitrate == '32-bit':
+                subtype = 'FLOAT'
+
             # Save as WAV first
             if target_format.lower() in ["wav", "flac"]:
-                logger.info("Attempting to save as 24-bit WAV")
+                logger.info(f"Attempting to save intermediate WAV as {subtype}")
                 try:
-                    sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate, subtype='PCM_24')
+                    sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate, subtype=subtype)
                 except Exception as e:
-                    logger.error(f"Failed to save 24-bit with sf: {e}")
-                    try:
-                        logger.warning("Falling back to 16-bit WAV...")
-                        sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate, subtype='PCM_16')
-                    except Exception as e2:
-                        logger.error(f"Failed to save 16-bit with sf: {e2}")
-                        raise e2
+                    logger.error(f"Failed to save with subtype {subtype}: {e}")
+                    # Fallback
+                    sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate)
             else:
                 try:
                     sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate)
