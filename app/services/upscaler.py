@@ -6,7 +6,7 @@ import subprocess
 import traceback
 import tempfile
 import gc
-from audiosr.pipeline import build_model, super_resolution
+from audiosr.pipeline import build_model, super_resolution, make_batch_for_super_resolution
 # Explicitly import where we need to patch
 import audiosr.utils
 import audiosr.pipeline
@@ -82,11 +82,6 @@ class UpscalerService:
             try:
                 # "basic" is the default model.
                 self.model = build_model(model_name="basic", device=self.device)
-                
-                # Note: We do NOT explicitly cast model to .half() here anymore.
-                # Instead, we use automatic mixed precision (amp) during inference.
-                # This avoids type mismatches with float input tensors.
-                
                 logger.info("AudioSR model loaded successfully.")
             except Exception as e:
                 logger.error(f"Failed to load AudioSR model: {e}")
@@ -106,11 +101,69 @@ class UpscalerService:
         if self.device == "cuda":
             torch.cuda.empty_cache()
 
-    def _process_channel_waveform(self, waveform, sr, ddim_steps, guidance_scale, seed):
+    def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
-        Processes a single-channel waveform.
-        Expects waveform shape: [1, samples]
-        Returns upscaled waveform: [1, samples]
+        Runs super_resolution on a batch of files to maximize GPU usage.
+        """
+        import audiosr.pipeline as pipeline
+
+        # 1. Prepare batch
+        pipeline.seed_everything(int(seed))
+
+        batched_inputs = {
+            "waveform": [],
+            "stft": [],
+            "log_mel_spec": [],
+            "lowpass_mel": [],
+            "waveform_lowpass": [],
+            "sampling_rate": 48000
+        }
+
+        max_duration = 5.12 # Standard for AudioSR
+
+        for f in input_files:
+            # make_batch_for_super_resolution returns (batch_dict, duration)
+            # where each item in batch_dict is already unsqueezed [1, ...]
+            mini_batch, _ = make_batch_for_super_resolution(f)
+
+            for k in batched_inputs.keys():
+                if k != "sampling_rate" and k in mini_batch:
+                     batched_inputs[k].append(mini_batch[k])
+
+        # Concatenate
+        final_batch = {}
+        for k in batched_inputs.keys():
+            if k == "sampling_rate":
+                final_batch[k] = batched_inputs[k]
+            elif len(batched_inputs[k]) > 0:
+                final_batch[k] = torch.cat(batched_inputs[k], dim=0) # [B, ...]
+                # Move to device
+                final_batch[k] = final_batch[k].to(self.device)
+
+        # 2. Run Inference
+        if self.device == "cuda":
+             with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
+                with torch.no_grad():
+                    waveforms = self.model.generate_batch(
+                        final_batch,
+                        unconditional_guidance_scale=guidance_scale,
+                        ddim_steps=ddim_steps,
+                        duration=max_duration,
+                    )
+        else:
+             with torch.no_grad():
+                waveforms = self.model.generate_batch(
+                    final_batch,
+                    unconditional_guidance_scale=guidance_scale,
+                    ddim_steps=ddim_steps,
+                    duration=max_duration,
+                )
+
+        return waveforms # [B, 1, samples]
+
+    def _process_channel_waveform(self, waveform, sr, ddim_steps, guidance_scale, seed, batch_size=4):
+        """
+        Processes a single-channel waveform using Overlap-Add (OLA) and Batching.
         """
         # Normalize waveform
         max_val = torch.max(torch.abs(waveform))
@@ -119,93 +172,117 @@ class UpscalerService:
         else:
             logger.warning("Audio appears to be silent (max value 0).")
 
-        # Split into 5.12s segments
-        segment_length = 5.12
-        samples_per_segment = int(segment_length * sr)
         total_samples = waveform.shape[-1]
-        num_segments = int(np.ceil(total_samples / samples_per_segment))
 
-        processed_segments = []
-        temp_segments = []
+        # OLA Parameters
+        segment_length_sec = 5.12
+        segment_length = int(segment_length_sec * sr)
+        overlap = 0.5
+        stride = int(segment_length * (1 - overlap))
 
-        logger.info(f"Processing {num_segments} segments sequentially for channel...")
+        # Calculate number of segments
+        if total_samples <= segment_length:
+            num_segments = 1
+        else:
+            num_segments = int(np.ceil((total_samples - segment_length) / stride)) + 1
+
+        logger.info(f"Processing {num_segments} segments (OLA) with batch size {batch_size}...")
+
+        # Prepare output buffer and weight buffer
+        output_waveform = torch.zeros_like(waveform)
+        output_weights = torch.zeros_like(waveform)
+
+        # Create Hanning window
+        window = torch.hann_window(segment_length).to(waveform.device)
+
+        segments_info = [] # List of (start, end, temp_file_path)
 
         try:
+            # 1. Slice and Save all segments
             for i in range(num_segments):
-                start_sample = i * samples_per_segment
-                end_sample = min((i + 1) * samples_per_segment, total_samples)
+                start = i * stride
+                end = start + segment_length
 
-                segment = waveform[:, start_sample:end_sample]
-                original_length = segment.shape[-1]
+                # Pad if last segment exceeds length
+                segment = waveform[:, start:end]
+                if segment.shape[-1] < segment_length:
+                    pad_amt = segment_length - segment.shape[-1]
+                    segment = torch.nn.functional.pad(segment, (0, pad_amt))
 
-                # Save segment to temporary file
+                # Save to temp
                 with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_seg:
                     temp_seg_path = tmp_seg.name
 
-                temp_segments.append(temp_seg_path)
-
-                # segment is [1, samples] (mono)
-                # sf.write expects [samples, channels] or [samples]
+                # Write
                 sf.write(temp_seg_path, segment.T.numpy(), sr)
+                segments_info.append({"start": start, "end": end, "path": temp_seg_path})
 
-                # Call super_resolution with Automatic Mixed Precision (AMP)
-                # This enables FP16 speedup without manual type casting errors.
-                if self.device == "cuda":
-                     with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
-                        out_seg = super_resolution(
-                            self.model,
-                            temp_seg_path,
-                            seed=seed,
-                            ddim_steps=ddim_steps,
-                            guidance_scale=guidance_scale
-                        )
-                else:
-                    # CPU fallback (no amp)
-                    out_seg = super_resolution(
-                        self.model,
-                        temp_seg_path,
-                        seed=seed,
-                        ddim_steps=ddim_steps,
-                        guidance_scale=guidance_scale
-                    )
-                
-                if isinstance(out_seg, np.ndarray):
-                    out_seg = torch.from_numpy(out_seg).float()
-                else:
-                    out_seg = out_seg.detach().cpu().float()
-                
-                # Trim if necessary.
-                if out_seg.shape[-1] > original_length:
-                    out_seg = out_seg[..., :original_length]
-                
-                processed_segments.append(out_seg)
+            # 2. Process in Batches
+            for i in range(0, len(segments_info), batch_size):
+                batch_files = [s["path"] for s in segments_info[i : i + batch_size]]
+                logger.info(f"Processing batch {i // batch_size + 1}/{(len(segments_info) + batch_size - 1) // batch_size}")
 
-                # Clean up temp file
-                if os.path.exists(temp_seg_path):
-                    os.remove(temp_seg_path)
+                try:
+                    # Run batch inference
+                    out_batch = self._batched_super_resolution(batch_files, ddim_steps, guidance_scale, seed)
 
-            # Concatenate
-            if len(processed_segments) > 0:
-                full_waveform = torch.cat(processed_segments, dim=-1)
-            else:
-                 raise Exception("No segments processed")
+                    # 3. Overlap-Add
+                    for j, out_tensor in enumerate(out_batch):
+                        idx = i + j
+                        info = segments_info[idx]
+                        start = info["start"]
 
-            # Ensure we have [1, samples]
-            if full_waveform.dim() == 3:
-                 # Usually comes as [1, 1, samples] or [batch, channels, samples]
-                full_waveform = full_waveform.squeeze(0)
+                        # out_tensor is [1, samples] or [samples]
+                        if out_tensor.dim() == 2:
+                            out_tensor = out_tensor.squeeze(0)
 
-            return full_waveform
+                        # Ensure on CPU
+                        out_tensor = out_tensor.detach().cpu().float()
+
+                        # Apply Window
+                        # Ensure lengths match
+                        if out_tensor.shape[-1] != segment_length:
+                            # Trim or pad? AudioSR output should be correct duration usually
+                            # but sometimes it differs slightly due to internal resizing.
+                            # Resample to match exact sample count if needed?
+                            # Usually AudioSR output matches 5.12s @ 48kHz
+                            pass
+
+                        # If output length differs from window length (e.g. slight rounding in model), trim/pad
+                        if out_tensor.shape[-1] > segment_length:
+                             out_tensor = out_tensor[:segment_length]
+                        elif out_tensor.shape[-1] < segment_length:
+                             out_tensor = torch.nn.functional.pad(out_tensor, (0, segment_length - out_tensor.shape[-1]))
+
+                        weighted_seg = out_tensor * window.cpu()
+
+                        # Add to buffer
+                        # Handle last segment boundary check
+                        valid_len = min(segment_length, output_waveform.shape[-1] - start)
+
+                        output_waveform[:, start : start + valid_len] += weighted_seg[:valid_len]
+                        output_weights[:, start : start + valid_len] += window.cpu()[:valid_len]
+
+                except Exception as e:
+                    logger.error(f"Batch processing failed: {e}")
+                    raise e
+
+            # 4. Normalize by weights
+            # Avoid division by zero
+            mask = output_weights > 1e-6
+            output_waveform[mask] /= output_weights[mask]
+
+            return output_waveform
 
         finally:
-             for f in temp_segments:
-                 if os.path.exists(f):
+             for info in segments_info:
+                 if os.path.exists(info["path"]):
                      try:
-                         os.remove(f)
+                         os.remove(info["path"])
                      except:
                          pass
 
-    def process_track(self, input_path, output_path, ddim_steps=50, guidance_scale=3.5, seed=42,
+    def process_track(self, input_path, output_path, ddim_steps=25, guidance_scale=3.5, seed=42,
                       target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=4):
         """
         Upscale the audio file at input_path and save to output_path.
@@ -217,7 +294,7 @@ class UpscalerService:
             logger.info(f"Starting upscaling: {input_path} -> {output_path} "
                         f"(format: {target_format}, sr: {target_sample_rate}, "
                         f"br: {target_bitrate}, steps: {ddim_steps}, "
-                        f"guidance: {guidance_scale}, seed: {seed})")
+                        f"guidance: {guidance_scale}, seed: {seed}, batch: {batch_size})")
 
             temp_wav = None
 
@@ -250,30 +327,28 @@ class UpscalerService:
 
             if channels == 1:
                 # Process Mono
-                upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed)
+                upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
             elif channels == 2:
                 # Process Stereo - Split channels
                 logger.info("Stereo detected. Processing Left Channel...")
                 left_channel = waveform[0:1, :]
-                out_left = self._process_channel_waveform(left_channel, sr, ddim_steps, guidance_scale, seed)
+                out_left = self._process_channel_waveform(left_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
 
                 logger.info("Stereo detected. Processing Right Channel...")
                 right_channel = waveform[1:2, :]
-                out_right = self._process_channel_waveform(right_channel, sr, ddim_steps, guidance_scale, seed)
+                out_right = self._process_channel_waveform(right_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
 
                 # Combine
-                # Ensure they are same length (should be, but just in case)
                 min_len = min(out_left.shape[-1], out_right.shape[-1])
                 out_left = out_left[..., :min_len]
                 out_right = out_right[..., :min_len]
 
                 upscaled_waveform = torch.cat([out_left, out_right], dim=0)
             else:
-                 # For > 2 channels, just mix to mono for now or handle similarly.
-                 # Let's fallback to mixing to mono then upscaling to avoid complexity if user uploads 5.1
+                 # For > 2 channels, just mix to mono for now
                  logger.warning(f"Unsupported channel count {channels}. Downmixing to mono.")
                  waveform = torch.mean(waveform, dim=0, keepdim=True)
-                 upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed)
+                 upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
 
             logger.info(f"Generated waveform shape: {upscaled_waveform.shape}, dtype: {upscaled_waveform.dtype}, device: {upscaled_waveform.device}")
 
@@ -295,10 +370,6 @@ class UpscalerService:
                 upscaled_waveform = resampler(upscaled_waveform)
                 logger.info(f"Resampled waveform shape: {upscaled_waveform.shape}")
 
-            # Calculate estimated size in MB
-            est_size = (upscaled_waveform.shape[0] * upscaled_waveform.shape[1] * 4) / (1024 * 1024)
-            logger.info(f"Estimated uncompressed size: {est_size:.2f} MB")
-
             # Save as WAV first
             if target_format.lower() in ["wav", "flac"]:
                 logger.info("Attempting to save as 24-bit WAV")
@@ -307,7 +378,6 @@ class UpscalerService:
                     sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate, subtype='PCM_24')
                 except Exception as e:
                     logger.error(f"Failed to save 24-bit with sf: {e}")
-                    # Fallback to 16-bit (PCM_16) if 24-bit fails
                     try:
                         logger.warning("Falling back to 16-bit WAV...")
                         sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate, subtype='PCM_16')
