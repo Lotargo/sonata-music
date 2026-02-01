@@ -108,11 +108,13 @@ class StudioDSP:
         # Map 0-1 "amount" to Threshold/Ratio
         comp_amt = params.get("compressor_amount", 0.0)
         if comp_amt > 0:
-            # Threshold: -10dB to -30dB
-            threshold = -10 - (comp_amt * 20)
-            # Ratio: 2:1 to 8:1
-            ratio = 2 + (comp_amt * 6)
-            board.append(Compressor(threshold_db=threshold, ratio=ratio, attack_ms=10, release_ms=100))
+            # Threshold: -8dB to -24dB (Gentler start)
+            threshold = -8 - (comp_amt * 16)
+            # Ratio: 1.5:1 to 4:1 (Mastering grade)
+            ratio = 1.5 + (comp_amt * 2.5)
+            # Attack: 30ms (Preserve transients/punch)
+            # Release: 250ms (Smooth response, prevents distortion)
+            board.append(Compressor(threshold_db=threshold, ratio=ratio, attack_ms=30, release_ms=250))
 
         # 5. Reverb
         if params.get("reverb_enabled", False):
