@@ -48,7 +48,7 @@ def upload_file():
         return jsonify(new_track.to_dict()), 201
     return jsonify({'error': 'File type not allowed'}), 400
 
-def run_upscaling(app, track_id, format, sample_rate, bitrate, steps, guidance, seed, batch_size):
+def run_upscaling(app, track_id, format, sample_rate, bitrate, steps, guidance, seed, batch_size, mode, dsp_preset):
     with app.app_context():
         track = db.session.get(Track, track_id)
         if not track:
@@ -63,20 +63,23 @@ def run_upscaling(app, track_id, format, sample_rate, bitrate, steps, guidance, 
         try:
             # Generate output filename
             base, _ = os.path.splitext(track.filename)
-            output_filename = f"{base}_upscaled.{format}"
+            suffix = "_dsp" if mode == "dsp" else "_ai"
+            output_filename = f"{base}{suffix}.{format}"
             output_path = os.path.join(current_app.config['PROCESSED_FOLDER'], output_filename)
 
             # Run upscaling
             upscaler.process_track(
                 track.original_path,
                 output_path,
+                mode=mode,
                 target_format=format,
                 target_sample_rate=sample_rate,
                 target_bitrate=bitrate,
                 ddim_steps=steps,
                 guidance_scale=guidance,
                 seed=seed,
-                batch_size=batch_size
+                batch_size=batch_size,
+                dsp_preset=dsp_preset
             )
 
             track.processed_path = output_path
@@ -106,11 +109,13 @@ def process_track(track_id):
     guidance = float(data.get('guidance', 3.5))
     seed = int(data.get('seed', 42))
     batch_size = int(data.get('batch_size', 2))
+    mode = data.get('mode', 'ai')
+    dsp_preset = data.get('dsp_preset', 'mastering')
 
     # Start processing in a separate thread
     thread = threading.Thread(
         target=run_upscaling,
-        args=(current_app._get_current_object(), track_id, target_format, target_sample_rate, target_bitrate, steps, guidance, seed, batch_size)
+        args=(current_app._get_current_object(), track_id, target_format, target_sample_rate, target_bitrate, steps, guidance, seed, batch_size, mode, dsp_preset)
     )
     thread.start()
 
