@@ -212,22 +212,20 @@ class StudioDSP:
 
             for name, path in stems_map.items():
                 data, sr = sf.read(path)
+
+                # Robustly ensure (Channels, Samples) shape
+                # sf.read usually returns (Samples, Channels) e.g. (N, 2)
+                # We want (2, N) for processing
+                if data.ndim == 1:
+                    data = data[np.newaxis, :] # (1, Samples)
+                else:
+                    # If dim0 > dim1 (Samples > Channels), transpose
+                    if data.shape[0] > data.shape[1]:
+                        data = data.T # (Samples, Channels) -> (Channels, Samples)
+
                 # Resample if needed
                 if sr != sample_rate:
-                    data = data.T # resampy expects (channels, samples) usually, but check dims
-                    # sf reads as (samples, channels)
-                    # resampy.resample(x, sr_orig, sr_new, axis=-1)
-                    if data.ndim == 1:
-                        data = data[np.newaxis, :]
-                    else:
-                        data = data.T # Now (channels, samples)
-
                     data = resampy.resample(data, sr, sample_rate, axis=1)
-                else:
-                    if data.ndim == 1:
-                        data = data[np.newaxis, :]
-                    else:
-                        data = data.T # (channels, samples)
 
                 data = data.astype(np.float32)
                 loaded_stems[name] = data
