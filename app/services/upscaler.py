@@ -83,10 +83,9 @@ class UpscalerService:
                 # "basic" is the default model.
                 self.model = build_model(model_name="basic", device=self.device)
                 
-                # Apply FP16 quantization if on CUDA
-                if self.device == "cuda":
-                    logger.info("Converting model to FP16 for speedup on CUDA.")
-                    self.model = self.model.half()
+                # Note: We do NOT explicitly cast model to .half() here anymore.
+                # Instead, we use automatic mixed precision (amp) during inference.
+                # This avoids type mismatches with float input tensors.
                 
                 logger.info("AudioSR model loaded successfully.")
             except Exception as e:
@@ -149,14 +148,26 @@ class UpscalerService:
                 # sf.write expects [samples, channels] or [samples]
                 sf.write(temp_seg_path, segment.T.numpy(), sr)
 
-                # Call super_resolution
-                out_seg = super_resolution(
-                    self.model,
-                    temp_seg_path,
-                    seed=seed,
-                    ddim_steps=ddim_steps,
-                    guidance_scale=guidance_scale
-                )
+                # Call super_resolution with Automatic Mixed Precision (AMP)
+                # This enables FP16 speedup without manual type casting errors.
+                if self.device == "cuda":
+                     with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
+                        out_seg = super_resolution(
+                            self.model,
+                            temp_seg_path,
+                            seed=seed,
+                            ddim_steps=ddim_steps,
+                            guidance_scale=guidance_scale
+                        )
+                else:
+                    # CPU fallback (no amp)
+                    out_seg = super_resolution(
+                        self.model,
+                        temp_seg_path,
+                        seed=seed,
+                        ddim_steps=ddim_steps,
+                        guidance_scale=guidance_scale
+                    )
                 
                 if isinstance(out_seg, np.ndarray):
                     out_seg = torch.from_numpy(out_seg).float()
