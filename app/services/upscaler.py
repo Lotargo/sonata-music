@@ -412,15 +412,47 @@ class UpscalerService:
 
                     # 3. Process Stems & Mix
                     logger.info("Processing and mixing stems...")
-                    dsp.process_stems(stems_map, temp_wav, params=dsp_params, sample_rate=target_sample_rate)
+                    # returns (channels, samples) numpy array
+                    hybrid_audio = dsp.process_stems(stems_map, temp_wav, params=dsp_params, sample_rate=target_sample_rate)
 
-                # 4. Convert format if needed
+                # 4. Envelope Matching (Dynamics Restoration)
+                # Load original to get envelope reference
+                data, sr = sf.read(input_path)
+                if data.ndim == 1:
+                    data = data[None, :]
+                else:
+                    data = data.T # (C, S)
+
+                # Convert to Torch for envelope matching function
+                original_tensor = torch.from_numpy(data).float()
+                hybrid_tensor = torch.from_numpy(hybrid_audio).float()
+
+                # Resample original if needed to match hybrid output rate (for correct envelope calc)
+                if sr != target_sample_rate:
+                    resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sample_rate)
+                    original_tensor = resampler(original_tensor)
+
+                # Match Envelope
+                matched_waveform = self._match_envelope(original_tensor, hybrid_tensor, target_sample_rate, window_ms=100)
+
+                # 5. Save Final Output
+                # Determine subtype
+                subtype = 'PCM_24'
+                if target_bitrate == '16-bit': subtype = 'PCM_16'
+                elif target_bitrate == '32-bit': subtype = 'FLOAT'
+
+                try:
+                    sf.write(temp_wav, matched_waveform.numpy().T, target_sample_rate, subtype=subtype)
+                except Exception as e:
+                    logger.error(f"Failed to save hybrid output: {e}")
+                    sf.write(temp_wav, matched_waveform.numpy().T, target_sample_rate)
+
+                # 6. Convert format if needed
                 if target_format.lower() != "wav":
                     if not self.ffmpeg_available:
                         logger.error("FFmpeg not found! Cannot convert to lossy formats.")
                     else:
                         self._convert_format(temp_wav, output_path, target_format, target_bitrate)
-                        # Cleanup temp
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 

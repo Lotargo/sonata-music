@@ -293,6 +293,10 @@ class StudioDSP:
                     audio = np.concatenate([audio, audio], axis=0)
                 mix += audio
 
+            # Apply Headroom (Gain Staging) before Master Chain
+            # Reduce mix by -6dB to prevent limiter "choking" / flattening
+            mix = mix * 0.5
+
             # Apply Master Glue (The "Balanced" chain we just fixed)
             # Use provided params or default to mastering
             master_config = self.preset_configs["mastering"].copy()
@@ -307,13 +311,8 @@ class StudioDSP:
             master_board = self.build_chain(master_config)
             final_mix = master_board(mix, sample_rate)
 
-            # Save
-            output_dir = os.path.dirname(output_path)
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
-
-            sf.write(output_path, final_mix.T, sample_rate, subtype='PCM_24')
-            return True
+            # Return the audio data instead of saving, so upscaler can do Envelope Matching
+            return final_mix
 
         except Exception as e:
             logger.error(f"Hybrid stem processing failed: {e}")

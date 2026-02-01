@@ -48,8 +48,8 @@ class SeparatorService:
             wav = wav.unsqueeze(0).to(self.device)
 
             # 3. Inference
-            # shifts=1 for speed (use 2+ for quality, but user wants speed/efficiency)
-            sources = apply_model(model, wav, shifts=1, split=True, overlap=0.25, progress=False)[0]
+            # shifts=2 for better quality (Bagging) as requested
+            sources = apply_model(model, wav, shifts=2, split=True, overlap=0.25, progress=False)[0]
 
             # sources shape: (4, 2, samples) -> [drums, bass, other, vocals] order usually
             # But demucs.apply returns sources in the order of model.sources
