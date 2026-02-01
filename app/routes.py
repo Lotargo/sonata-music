@@ -105,7 +105,7 @@ def process_track(track_id):
     steps = int(data.get('steps', 50))
     guidance = float(data.get('guidance', 3.5))
     seed = int(data.get('seed', 42))
-    batch_size = int(data.get('batch_size', 4))
+    batch_size = int(data.get('batch_size', 2))
 
     # Start processing in a separate thread
     thread = threading.Thread(
