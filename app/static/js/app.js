@@ -35,6 +35,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const guidanceScale = document.getElementById('guidance-scale');
     const guidanceValue = document.getElementById('guidance-value');
 
+    // Mode Selector
+    const modeAiBtn = document.getElementById('mode-ai');
+    const modeDspBtn = document.getElementById('mode-dsp');
+    const processingModeInput = document.getElementById('processing-mode');
+    const modeDesc = document.getElementById('mode-desc');
+    const aiSettings = document.getElementById('ai-settings');
+    const dspSettings = document.getElementById('dsp-settings');
+    const dspPreset = document.getElementById('dsp-preset');
+
     // Initialize Wavesurfer
     wavesurfer = WaveSurfer.create({
         container: '#waveform',
@@ -85,6 +94,37 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             guidanceValue.textContent = guidanceScale.value;
         };
+    }
+
+    // Mode Switching Logic
+    if (modeAiBtn && modeDspBtn) {
+        modeAiBtn.onclick = () => setMode('ai');
+        modeDspBtn.onclick = () => setMode('dsp');
+    }
+
+    function setMode(mode) {
+        processingModeInput.value = mode;
+        if (mode === 'ai') {
+            modeAiBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+            modeAiBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
+
+            modeDspBtn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+            modeDspBtn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
+
+            aiSettings.classList.remove('hidden');
+            dspSettings.classList.add('hidden');
+            modeDesc.textContent = "Uses AudioSR AI to hallucinate missing high frequencies. Best for low-quality sources.";
+        } else {
+            modeDspBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+            modeDspBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
+
+            modeAiBtn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+            modeAiBtn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
+
+            dspSettings.classList.remove('hidden');
+            aiSettings.classList.add('hidden');
+            modeDesc.textContent = "Uses professional DSP chain (EQ, Compression, Limiter) to polish audio without AI generation. Best for good sources.";
+        }
     }
 
     if (guidanceScale) {
@@ -262,6 +302,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // Fetch values from preset or inputs
         const steps = document.getElementById('ddim-steps').value;
         const guidance = document.getElementById('guidance-scale').value;
+        const mode = document.getElementById('processing-mode').value;
+        const dspPresetVal = document.getElementById('dsp-preset').value;
 
         try {
             const response = await fetch(`/process/${id}`, {
@@ -272,7 +314,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     sample_rate: sr,
                     bitrate: bitrate,
                     steps: steps,
-                    guidance: guidance
+                    guidance: guidance,
+                    mode: mode,
+                    dsp_preset: dspPresetVal
                 })
             });
 

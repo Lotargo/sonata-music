@@ -2431,6 +2431,56 @@ test = ["hypothesis (>=6.46.1)", "pytest (>=7.3.2)", "pytest-xdist (>=2.2.0)"]
 xml = ["lxml (>=4.9.2)"]
 
 [[package]]
+name = "pedalboard"
+version = "0.9.21"
+description = "A Python library for adding effects to audio."
+optional = false
+python-versions = ">=3.10"
+groups = ["main"]
+files = [
+    {file = "pedalboard-0.9.21-cp310-cp310-macosx_10_14_x86_64.whl", hash = "sha256:2016018a70cbe594ab570c7e5da777eee32d69c3b145456c2c761c0ecb0ab0e7"},
+    {file = "pedalboard-0.9.21-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:38054a9019515292fb4c459956eac52d60bf0836c556f81ccd06f59b7bf8212e"},
+    {file = "pedalboard-0.9.21-cp310-cp310-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2c03e6349b02f00d9d573e65b8c3670ac48dc60745a597dcafe0600baf504a0e"},
+    {file = "pedalboard-0.9.21-cp310-cp310-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:9d02640169c7932dff1ebde1a5f612e1ef094792ca8bb30349ea11d2764b3b9c"},
+    {file = "pedalboard-0.9.21-cp310-cp310-musllinux_1_1_aarch64.whl", hash = "sha256:22250660cb9eb13187fc13e59218c875de0b1de3174ea62783c7e0acaa53a4a4"},
+    {file = "pedalboard-0.9.21-cp310-cp310-musllinux_1_1_x86_64.whl", hash = "sha256:0d29f1b9e42224171c328c9e61379c492b67c0a24da7085697cc855ea2329dbf"},
+    {file = "pedalboard-0.9.21-cp310-cp310-win_amd64.whl", hash = "sha256:104787a129564c2ba41b2f72d00826168289a4152d4b3cb03ced39dd06ccf1f8"},
+    {file = "pedalboard-0.9.21-cp311-cp311-macosx_10_14_x86_64.whl", hash = "sha256:0360556d0694eed51248725811f2a9ab2b2b700694f97cd43df3c9adc4000fee"},
+    {file = "pedalboard-0.9.21-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:a7fd11b1c2ef03887064dc2f99352c017604906875b8470032b9f8071efa468e"},
+    {file = "pedalboard-0.9.21-cp311-cp311-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:dfab442fa982ed57f4912b08b423f8dda92e0400fc0e0029db22fb7f4cb9d1ef"},
+    {file = "pedalboard-0.9.21-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8d5dc025fdec0c90417d6b893067e0a5632e4cf627952790bf8286816131c841"},
+    {file = "pedalboard-0.9.21-cp311-cp311-win_amd64.whl", hash = "sha256:73dd8d8d3f8edc035bd5af9de798b596d93bec453ec774f8dd1926eeb5163aab"},
+    {file = "pedalboard-0.9.21-cp312-cp312-macosx_10_14_universal2.whl", hash = "sha256:9db77f23d7d745fd31d20cfde75e5e515cd07377b758f96388debbfe8a25ad3d"},
+    {file = "pedalboard-0.9.21-cp312-cp312-macosx_10_14_x86_64.whl", hash = "sha256:bb23ba7899867815d32f5b8bcdbcf319cd86a2a3476fcc98d49f21d1c9ca49f6"},
+    {file = "pedalboard-0.9.21-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:54c37bba911407071177bd4f01323999289e46e887903d03087ad026ba689641"},
+    {file = "pedalboard-0.9.21-cp312-cp312-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:435e40b602b0f81f9c82aae65129ffef399dfa222ef7789f728506dfbe79cade"},
+    {file = "pedalboard-0.9.21-cp312-cp312-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:6d58999ce9882f31ebdee594af6f0c214f6d5ce047cca08bbaa1a81b2e537b5d"},
+    {file = "pedalboard-0.9.21-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:165aa17f9155c18e489613080f7aa14a108b61bd0c11d93edde51b358adae402"},
+    {file = "pedalboard-0.9.21-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:05dbd244fd46739c4c6d89964b8a417955854cecfbfaccab2472cfdbb4f92d81"},
+    {file = "pedalboard-0.9.21-cp312-cp312-win_amd64.whl", hash = "sha256:cfc4185362e29b8a26211eeeee67971c138c02d61d621dc9b003368afc1e2ef4"},
+    {file = "pedalboard-0.9.21-cp313-cp313-macosx_10_14_x86_64.whl", hash = "sha256:6cf5acb9f2239e73d2df8a42667a4856b92e7b4a23127771a7c82ce0cd6e5842"},
+    {file = "pedalboard-0.9.21-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:7077efeeb6776be38940a08e36abb47d00e420f0dd9f09331989a6ecd28177ac"},
+    {file = "pedalboard-0.9.21-cp313-cp313-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:e66dc37f309fe0dd8a8c3d9725167af965fcdb47f58064b9c8ea461071f80fee"},
+    {file = "pedalboard-0.9.21-cp313-cp313-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:632b51ca25f13a7883609c440b07ee4c4f615b5fadc7d357c31b9dbe0e0cdb05"},
+    {file = "pedalboard-0.9.21-cp313-cp313-win_amd64.whl", hash = "sha256:eba7df9537c903ef651078c693d5058c6cd0953a0715a71dc8ea7faf7832d0f0"},
+    {file = "pedalboard-0.9.21-cp313-cp313t-macosx_10_14_x86_64.whl", hash = "sha256:97c7e77771c3e88d3d66d21c3ed0e5525d23f775997b9254451af07e44a1492e"},
+    {file = "pedalboard-0.9.21-cp313-cp313t-macosx_11_0_arm64.whl", hash = "sha256:c18d3e663de00bc48044fbdeedf49722438d2a5a99f82660e73ec9eeb8482e48"},
+    {file = "pedalboard-0.9.21-cp313-cp313t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:638adfd77f4396704dc3c98585ed48e8d6e8d15378b81de5aca17373eeb89f67"},
+    {file = "pedalboard-0.9.21-cp313-cp313t-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:85f7725088d869e3012ef0decf9b6765c6e9726844ed384a2a7b7940109db8ab"},
+    {file = "pedalboard-0.9.21-cp314-cp314-macosx_11_0_arm64.whl", hash = "sha256:831cfd578beaaaddc548bb1b7c19cf5c6b3029b226b4ed8663c5dec2d9bf6267"},
+    {file = "pedalboard-0.9.21-cp314-cp314-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:80ed314ae7ce077ca552a58de2630e81fb647eaf64cc951dc9784600600feae8"},
+    {file = "pedalboard-0.9.21-cp314-cp314-win_amd64.whl", hash = "sha256:3c04791843975165dd11b3379a11a7d84a57be1e1fb4de6205dab08da4ff9093"},
+    {file = "pedalboard-0.9.21-cp314-cp314t-macosx_11_0_arm64.whl", hash = "sha256:a1860707790ed7167b471ccc3f8056eb0b2dcf06767042c44cf054e745fb9c2a"},
+    {file = "pedalboard-0.9.21-cp314-cp314t-manylinux_2_27_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:5e410e1390aae7f46d4e61231e8b1a0d20d5eb02de68f32cc572748b82a5ef6d"},
+]
+
+[package.dependencies]
+numpy = "*"
+
+[package.extras]
+test = ["mido", "mutagen", "mypy", "psutil", "pyright", "pyright", "pytest", "pytest-cov", "pytest-mock", "tqdm"]
+
+[[package]]
 name = "phonemizer"
 version = "3.3.0"
 description = "Simple text to phones converter for multiple languages"
@@ -4355,4 +4405,4 @@ watchdog = ["watchdog (>=2.3)"]
 [metadata]
 lock-version = "2.1"
 python-versions = ">=3.10,<3.15"
-content-hash = "a82a18f616a5bde6f0bebec9b01d699598b2c8344f0cf3f2e36aae35fdd5b2a2"
+content-hash = "08d0ba7d68cc048bcffc53d2353a790b6c6fdceac4d4b43c40fdfc4d5c4d123f"

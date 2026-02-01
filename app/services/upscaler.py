@@ -13,6 +13,7 @@ import audiosr.pipeline
 import soundfile as sf
 import numpy as np
 from pydub import AudioSegment
+from app.services.dsp import dsp
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -86,6 +87,24 @@ class UpscalerService:
             except Exception as e:
                 logger.error(f"Failed to load AudioSR model: {e}")
                 raise e
+
+    def _convert_format(self, input_wav, output_path, target_format, bitrate):
+        """Helper to convert WAV to other formats using pydub."""
+        logger.info(f"Converting to {target_format} using pydub")
+        audio = AudioSegment.from_wav(input_wav)
+
+        format_map = {
+            'mp3': 'mp3',
+            'flac': 'flac',
+            'ogg': 'ogg',
+            'vorbis': 'ogg'
+        }
+        out_fmt = format_map.get(target_format.lower(), target_format.lower())
+
+        if out_fmt in ['mp3', 'ogg']:
+            audio.export(output_path, format=out_fmt, bitrate=bitrate)
+        else:
+            audio.export(output_path, format=out_fmt)
 
     def unload_model(self):
         """Unloads the model and frees VRAM/RAM."""
@@ -315,21 +334,46 @@ class UpscalerService:
                      except:
                          pass
 
-    def process_track(self, input_path, output_path, ddim_steps=50, guidance_scale=3.5, seed=42,
-                      target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=2):
+    def process_track(self, input_path, output_path, mode="ai", ddim_steps=50, guidance_scale=3.5, seed=42,
+                      target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=2,
+                      dsp_preset="mastering"):
         """
-        Upscale the audio file at input_path and save to output_path.
-        Supports FP16, custom steps, guidance, seed.
+        Upscale/Process the audio file at input_path and save to output_path.
+        Modes: 'ai' (AudioSR) or 'dsp' (Studio DSP).
         """
         try:
-            self.load_model()
-
-            logger.info(f"Starting upscaling: {input_path} -> {output_path} "
-                        f"(format: {target_format}, sr: {target_sample_rate}, "
-                        f"br: {target_bitrate}, steps: {ddim_steps}, "
-                        f"guidance: {guidance_scale}, seed: {seed}, batch: {batch_size})")
+            logger.info(f"Starting processing ({mode}): {input_path} -> {output_path}")
 
             temp_wav = None
+
+            # --- DSP MODE ---
+            if mode == "dsp":
+                # Determine temp output for WAV generation
+                if target_format.lower() == "wav":
+                    temp_wav = output_path
+                else:
+                    temp_wav = output_path + ".tmp.wav"
+
+                # Run DSP
+                # dsp.process handles resampling and effect chain
+                dsp.process(input_path, temp_wav, preset_name=dsp_preset, sample_rate=target_sample_rate)
+
+                # Convert to target format if needed
+                if target_format.lower() != "wav":
+                    if not self.ffmpeg_available:
+                        logger.error("FFmpeg not found! Cannot convert to lossy formats.")
+                    else:
+                        self._convert_format(temp_wav, output_path, target_format, target_bitrate)
+                        # Cleanup temp
+                        if os.path.exists(temp_wav) and temp_wav != output_path:
+                            os.remove(temp_wav)
+
+                return True
+
+            # --- AI MODE ---
+            self.load_model()
+
+            logger.info(f"AI Params: steps={ddim_steps}, guidance={guidance_scale}, seed={seed}, batch={batch_size}")
 
             # Read file using soundfile
             try:
@@ -431,22 +475,7 @@ class UpscalerService:
                 if not self.ffmpeg_available:
                     logger.error("FFmpeg not found! Cannot convert to lossy formats or FLAC.")
                 else:
-                    logger.info(f"Converting to {target_format} using pydub")
-                    audio = AudioSegment.from_wav(temp_wav)
-
-                    format_map = {
-                        'mp3': 'mp3',
-                        'flac': 'flac',
-                        'ogg': 'ogg',
-                        'vorbis': 'ogg'
-                    }
-                    out_fmt = format_map.get(target_format.lower(), target_format.lower())
-
-                    if out_fmt in ['mp3', 'ogg']:
-                        audio.export(output_path, format=out_fmt, bitrate=target_bitrate)
-                    else:
-                        audio.export(output_path, format=out_fmt)
-
+                    self._convert_format(temp_wav, output_path, target_format, target_bitrate)
                     if temp_wav and os.path.exists(temp_wav) and temp_wav != output_path:
                         os.remove(temp_wav)
 

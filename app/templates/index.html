@@ -70,28 +70,59 @@
                     <button id="remove-file" class="text-red-400 hover:text-red-300"><i data-lucide="trash-2" class="w-4 h-4"></i></button>
                 </div>
 
-                <div class="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-400 mb-2">Quality Preset</label>
-                        <select id="quality-preset" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                            <option value="fast">Fast (25 steps)</option>
-                            <option value="balanced" selected>Balanced (50 steps)</option>
-                            <option value="high">High (100 steps)</option>
-                            <option value="custom">Custom</option>
-                        </select>
+                <!-- Mode Selector -->
+                <div class="mb-6">
+                    <label class="block text-sm font-medium text-slate-400 mb-2">Processing Mode</label>
+                    <div class="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+                        <button id="mode-ai" class="flex-1 py-2 text-sm font-bold rounded-md bg-indigo-600 text-white shadow-sm transition">
+                            Generative AI
+                        </button>
+                        <button id="mode-dsp" class="flex-1 py-2 text-sm font-medium text-slate-400 hover:text-white transition">
+                            Studio DSP
+                        </button>
                     </div>
-                    <div>
-                        <label class="block text-sm font-medium text-slate-400 mb-2">Steps (DDIM)</label>
-                        <input type="number" id="ddim-steps" value="50" disabled class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                    <input type="hidden" id="processing-mode" value="ai">
+                    <p id="mode-desc" class="text-xs text-slate-500 mt-2">
+                        Uses AudioSR AI to hallucinate missing high frequencies. Best for low-quality sources.
+                    </p>
+                </div>
+
+                <!-- AI Settings -->
+                <div id="ai-settings">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-400 mb-2">Quality Preset</label>
+                            <select id="quality-preset" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                                <option value="fast">Fast (25 steps)</option>
+                                <option value="balanced" selected>Balanced (50 steps)</option>
+                                <option value="high">High (100 steps)</option>
+                                <option value="custom">Custom</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-400 mb-2">Steps (DDIM)</label>
+                            <input type="number" id="ddim-steps" value="50" disabled class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50">
+                        </div>
+                    </div>
+
+                    <div class="mb-6">
+                        <label class="block text-sm font-medium text-slate-400 mb-2">Guidance Scale (CFG)</label>
+                        <div class="flex items-center gap-4">
+                            <input type="range" id="guidance-scale" min="1.0" max="10.0" step="0.1" value="3.5" disabled class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50">
+                            <span id="guidance-value" class="text-sm font-mono w-8 text-right opacity-50">3.5</span>
+                        </div>
                     </div>
                 </div>
 
-                <div class="mb-6">
-                     <label class="block text-sm font-medium text-slate-400 mb-2">Guidance Scale (CFG)</label>
-                     <div class="flex items-center gap-4">
-                        <input type="range" id="guidance-scale" min="1.0" max="10.0" step="0.1" value="3.5" disabled class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-500 disabled:opacity-50">
-                        <span id="guidance-value" class="text-sm font-mono w-8 text-right opacity-50">3.5</span>
-                     </div>
+                <!-- DSP Settings -->
+                <div id="dsp-settings" class="hidden mb-6">
+                    <label class="block text-sm font-medium text-slate-400 mb-2">DSP Preset</label>
+                    <select id="dsp-preset" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                        <option value="mastering" selected>Mastering (Balanced)</option>
+                        <option value="clear">Clear (Vocal Focus)</option>
+                        <option value="warm">Warm (Vintage/Tube)</option>
+                        <option value="punchy">Punchy (Drums/Bass)</option>
+                    </select>
                 </div>
 
                 <div class="grid grid-cols-3 gap-4 mb-6">
