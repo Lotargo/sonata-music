@@ -2,6 +2,7 @@ import sys
 import os
 import torch
 import torchaudio
+import numpy as np
 from unittest.mock import MagicMock
 
 # Mock audiosr modules BEFORE importing app.services.upscaler
@@ -48,8 +49,8 @@ def test_upscaler_sequential_logic():
     # We simulate that super_resolution returns a 5.12s waveform (standard behavior of AudioSR)
     # 48000 * 5.12 = 245760 samples
     def side_effect_super_resolution(model, input_file, **kwargs):
-        # Return random noise of 5.12s length
-        return torch.randn(1, 245760)
+        # Return random noise of 5.12s length AS A NUMPY ARRAY to reproduce the error
+        return np.random.randn(1, 245760).astype(np.float32)
 
     mock_super_resolution.side_effect = side_effect_super_resolution
 
@@ -61,13 +62,9 @@ def test_upscaler_sequential_logic():
     input_path = "test_input.wav"
     output_path = "test_output.wav"
 
-    # Save dummy input
-    try:
-        torchaudio.save(input_path, waveform, sr, backend="soundfile")
-    except:
-        # Fallback if specific backend kwarg fails (depends on torchaudio version)
-        import soundfile as sf
-        sf.write(input_path, waveform.squeeze().numpy(), sr)
+    # Save dummy input using soundfile
+    import soundfile as sf
+    sf.write(input_path, waveform.squeeze().numpy(), sr)
 
     try:
         print(f"Processing {duration}s audio file...")
@@ -83,7 +80,6 @@ def test_upscaler_sequential_logic():
         if not os.path.exists(output_path):
             raise FileNotFoundError("Output file was not created")
 
-        import soundfile as sf
         data, out_sr = sf.read(output_path)
         # data is [samples, channels] or [samples]
         samples = data.shape[0]
@@ -99,9 +95,14 @@ def test_upscaler_sequential_logic():
 
     except Exception as e:
         print(f"Test failed with error: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+        # Expected failure
+        if "object has no attribute 'detach'" in str(e):
+             print("SUCCESS: Reproduced expected AttributeError.")
+        else:
+             print("WARNING: Failed with unexpected error.")
+             import traceback
+             traceback.print_exc()
+             sys.exit(1)
     finally:
         # Cleanup
         if os.path.exists(input_path):
