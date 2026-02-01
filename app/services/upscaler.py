@@ -4,6 +4,7 @@ import torchaudio
 import logging
 import subprocess
 import traceback
+import tempfile
 from audiosr.pipeline import build_model, super_resolution
 # Explicitly import where we need to patch
 import audiosr.utils
@@ -101,24 +102,20 @@ class UpscalerService:
                       target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=4):
         """
         Upscale the audio file at input_path and save to output_path.
-        Supports FP16, custom steps, guidance, seed, and batch processing for segments.
+        Supports FP16, custom steps, guidance, seed.
+        Batching logic has been removed in favor of robust sequential processing.
         """
         self.load_model()
 
         logger.info(f"Starting upscaling: {input_path} -> {output_path} "
                     f"(format: {target_format}, sr: {target_sample_rate}, "
                     f"br: {target_bitrate}, steps: {ddim_steps}, "
-                    f"guidance: {guidance_scale}, seed: {seed}, batch_size: {batch_size})")
+                    f"guidance: {guidance_scale}, seed: {seed})")
 
         temp_wav = None
+        temp_segments = []
         try:
-            # Check if input is long and needs segmentation/batching
-            # Audiosr default pipeline truncates or processes single segment.
-            # To support long files with batching, we need to manually chunk.
-            
-            # Read file (using our safe reader)
-            # read_wav_file returns [1, samples] normalized and padded to 5.12s
-            # But for long files, we want to read the raw full file first to chunk it ourselves.
+            # Read file (using our safe reader logic or similar)
             try:
                 waveform, sr = torchaudio.load(input_path, backend="soundfile")
             except:
@@ -140,8 +137,7 @@ class UpscalerService:
             if waveform.shape[0] > 1:
                 waveform = torch.mean(waveform, dim=0, keepdim=True)
             
-            # Normalize waveform (Crucial to prevent NaNs/Infs in STFT)
-            # Safe normalization
+            # Normalize waveform
             max_val = torch.max(torch.abs(waveform))
             if max_val > 0:
                 waveform = waveform / max_val
@@ -150,137 +146,81 @@ class UpscalerService:
             
             logger.info(f"Processed waveform shape: {waveform.shape}")
 
-            # Duration
-            duration = waveform.shape[-1] / sr
-            segment_length = 5.12 # AudioSR standard
+            # Split into 5.12s segments
+            segment_length = 5.12
             samples_per_segment = int(segment_length * sr)
+            total_samples = waveform.shape[-1]
+            num_segments = int(np.ceil(total_samples / samples_per_segment))
+
+            processed_segments = []
             
-            if duration <= segment_length * 2: # Short file, use default pipeline
-                 if self.device == "cuda":
-                    with torch.autocast(device_type="cuda", dtype=torch.float16):
-                         waveform = super_resolution(
+            logger.info(f"Processing {num_segments} segments sequentially...")
+
+            for i in range(num_segments):
+                start_sample = i * samples_per_segment
+                end_sample = min((i + 1) * samples_per_segment, total_samples)
+
+                segment = waveform[:, start_sample:end_sample]
+                original_length = segment.shape[-1]
+
+                # Save segment to temporary file
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_seg:
+                    temp_seg_path = tmp_seg.name
+
+                temp_segments.append(temp_seg_path)
+                try:
+                    # Use soundfile directly to avoid torchaudio backend issues
+                    # segment is [channels, samples], sf.write expects [samples, channels]
+                    sf.write(temp_seg_path, segment.T.numpy(), sr)
+                except Exception as e:
+                    logger.warning(f"sf.write failed: {e}. Trying torchaudio.save fallback.")
+                    try:
+                         torchaudio.save(temp_seg_path, segment, sr, backend="soundfile")
+                    except:
+                         torchaudio.save(temp_seg_path, segment, sr)
+
+                logger.info(f"Processing segment {i+1}/{num_segments} ({original_length} samples)")
+
+                # Call super_resolution
+                if self.device == "cuda":
+                     with torch.autocast(device_type="cuda", dtype=torch.float16):
+                         out_seg = super_resolution(
                             self.model,
-                            input_path,
+                            temp_seg_path,
                             seed=seed,
                             ddim_steps=ddim_steps,
                             guidance_scale=guidance_scale
                         )
-                 else:
-                    waveform = super_resolution(
+                else:
+                    out_seg = super_resolution(
                         self.model,
-                        input_path,
+                        temp_seg_path,
                         seed=seed,
                         ddim_steps=ddim_steps,
                         guidance_scale=guidance_scale
                     )
-            else:
-                # Long file: Batch processing
-                logger.info(f"Audio is {duration:.2f}s long. Processing in batches of size {batch_size}...")
                 
-                # Split into segments
-                num_segments = int(np.ceil(waveform.shape[-1] / samples_per_segment))
-                segments = []
+                # out_seg is likely on CPU or GPU? Detach and move to CPU immediately
+                out_seg = out_seg.detach().cpu().float()
                 
-                # Create segments with padding if needed
-                pad_len = num_segments * samples_per_segment - waveform.shape[-1]
-                logger.info(f"Padding waveform with {pad_len} samples to match segment multiples.")
+                # Trim if necessary.
+                if out_seg.shape[-1] > original_length:
+                    out_seg = out_seg[..., :original_length]
+                elif out_seg.shape[-1] < original_length:
+                     logger.warning(f"Output segment shorter than input: {out_seg.shape} vs {segment.shape}")
                 
-                if pad_len > 0:
-                    waveform = torch.nn.functional.pad(waveform, (0, pad_len))
+                processed_segments.append(out_seg)
                 
-                # Slice segments
-                for i in range(num_segments):
-                    seg = waveform[:, i*samples_per_segment : (i+1)*samples_per_segment]
-                    if seg.shape[-1] != samples_per_segment:
-                        logger.error(f"Segment {i} has unexpected length: {seg.shape}")
-                    segments.append(seg)
-                
-                # Process batches
-                processed_segments = []
-                
-                def process_batch_tensors(batch_tensors):
-                    batch_log_mel = []
-                    batch_waveform = []
-                    batch_lowpass_mel = []
-                    
-                    target_frame = 100 * 5.12 # 512
-                    
-                    for idx, wav in enumerate(batch_tensors):
-                        try:
-                            # wav is [1, samples]
-                            # wav_feature_extraction expects 2D numpy array [1, samples]
-                            # because it blindly slices index 0.
-                            wav_np = wav.numpy() # [1, samples]
-                            
-                            # Log shape for debugging
-                            # logger.info(f"Processing segment {idx}, shape: {wav_np.shape}")
-                            
-                            log_mel, stft = audiosr.utils.wav_feature_extraction(wav_np, int(target_frame))
-                            
-                            mini_batch = {
-                                "waveform": wav,
-                                "sampling_rate": 48000
-                            }
-                            
-                            lp_dict = audiosr.utils.lowpass_filtering_prepare_inference(mini_batch)
-                            wav_lp = lp_dict["waveform_lowpass"]
-                            
-                            # Extract lowpass features
-                            # wav_lp might be [samples] (1D) because lowpass return 1D
-                            # We must reshape to [1, samples] for wav_feature_extraction
-                            wav_lp_np = wav_lp.numpy()
-                            if wav_lp_np.ndim == 1:
-                                wav_lp_np = wav_lp_np[None, :]
-                            
-                            lp_mel, lp_stft = audiosr.utils.wav_feature_extraction(wav_lp_np, int(target_frame))
-                            
-                            batch_log_mel.append(torch.FloatTensor(log_mel).unsqueeze(0))
-                            batch_waveform.append(wav.unsqueeze(0)) 
-                            batch_lowpass_mel.append(torch.FloatTensor(lp_mel).unsqueeze(0))
-                        except Exception as e:
-                            logger.error(f"Error processing segment tensor: {e}")
-                            traceback.print_exc()
-                            raise e
-                    
-                    final_batch = {
-                        "log_mel_spec": torch.cat(batch_log_mel, dim=0),
-                        "lowpass_mel": torch.cat(batch_lowpass_mel, dim=0),
-                        "waveform": torch.cat(batch_waveform, dim=0),
-                    }
-                    
-                    for k in final_batch:
-                        final_batch[k] = final_batch[k].to(self.device)
-                        if self.device == "cuda":
-                            final_batch[k] = final_batch[k].half()
-                            
-                    with torch.no_grad():
-                        out = self.model.generate_batch(
-                            final_batch,
-                            unconditional_guidance_scale=guidance_scale,
-                            ddim_steps=ddim_steps,
-                            duration=5.12
-                        )
-                    
-                    return out.cpu().float()
+                # Clean up temp file
+                if os.path.exists(temp_seg_path):
+                    os.remove(temp_seg_path)
 
-                # Loop through chunks
-                for i in range(0, len(segments), batch_size):
-                    batch_chunk = segments[i : i + batch_size]
-                    logger.info(f"Processing batch {i//batch_size + 1}/{(len(segments)+batch_size-1)//batch_size}")
-                    
-                    if self.device == "cuda":
-                        with torch.autocast(device_type="cuda", dtype=torch.float16):
-                            out_batch = process_batch_tensors(batch_chunk)
-                    else:
-                        out_batch = process_batch_tensors(batch_chunk)
-                        
-                    for j in range(out_batch.shape[0]):
-                        processed_segments.append(out_batch[j])
-                
+            # Concatenate
+            if len(processed_segments) > 0:
                 waveform = torch.cat(processed_segments, dim=-1)
-                
-                if pad_len > 0:
-                    waveform = waveform[..., :-pad_len]
+            else:
+                 logger.error("No segments processed!")
+                 raise Exception("No segments processed")
 
             # Ensure we have [channels, samples]
             if waveform.dim() == 3:
@@ -288,11 +228,10 @@ class UpscalerService:
 
             logger.info(f"Generated waveform shape: {waveform.shape}, dtype: {waveform.dtype}, device: {waveform.device}")
 
-            # Safety check: if waveform is on GPU, move to CPU
-            waveform = waveform.detach().cpu().float()
-
             # Ensure directory exists
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            output_dir = os.path.dirname(output_path)
+            if output_dir:
+                os.makedirs(output_dir, exist_ok=True)
 
             # Temporary wav file if we need to convert or if saving to WAV
             if target_format.lower() == "wav":
@@ -315,12 +254,19 @@ class UpscalerService:
             if target_format.lower() in ["wav", "flac"]:
                 logger.info("Attempting to save as 24-bit WAV")
                 try:
-                    torchaudio.save(temp_wav, waveform, target_sample_rate, bits_per_sample=24)
+                    # waveform is [channels, samples]
+                    sf.write(temp_wav, waveform.T.numpy(), target_sample_rate, subtype='PCM_24')
                 except Exception as e:
-                    logger.warning(f"Failed to save 24-bit, falling back to default: {e}")
-                    torchaudio.save(temp_wav, waveform, target_sample_rate)
+                    logger.warning(f"Failed to save 24-bit with sf, falling back to torchaudio: {e}")
+                    try:
+                        torchaudio.save(temp_wav, waveform, target_sample_rate, bits_per_sample=24, backend="soundfile")
+                    except:
+                         torchaudio.save(temp_wav, waveform, target_sample_rate)
             else:
-                torchaudio.save(temp_wav, waveform, target_sample_rate)
+                try:
+                    sf.write(temp_wav, waveform.T.numpy(), target_sample_rate)
+                except:
+                    torchaudio.save(temp_wav, waveform, target_sample_rate)
 
             if target_format.lower() != "wav":
                 if not self.ffmpeg_available:
@@ -356,6 +302,12 @@ class UpscalerService:
                     os.remove(temp_wav)
                 except:
                     pass
+            for f in temp_segments:
+                 if os.path.exists(f):
+                     try:
+                         os.remove(f)
+                     except:
+                         pass
             raise e
 
 # Create a singleton instance
