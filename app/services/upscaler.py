@@ -186,7 +186,10 @@ class UpscalerService:
                 )
                 
                 # out_seg is likely on CPU or GPU? Detach and move to CPU immediately
-                out_seg = out_seg.detach().cpu().float()
+                if isinstance(out_seg, np.ndarray):
+                    out_seg = torch.from_numpy(out_seg).float()
+                else:
+                    out_seg = out_seg.detach().cpu().float()
                 
                 # Trim if necessary.
                 if out_seg.shape[-1] > original_length:
