@@ -101,6 +101,63 @@ class UpscalerService:
         if self.device == "cuda":
             torch.cuda.empty_cache()
 
+    def _match_envelope(self, source, target, sr, window_ms=100):
+        """
+        Applies the amplitude envelope of the source (original) to the target (upscaled).
+        Acts as the 'Parent' context enforcing dynamics on the 'Child'.
+        """
+        logger.info(f"Applying Global Envelope Matching (Window: {window_ms}ms)...")
+
+        # Ensure target matches source length
+        if source.shape[-1] != target.shape[-1]:
+            # This can happen due to minor OLA/Upscaling length diffs.
+            # We crop/pad target to match source, as source is the truth.
+            min_len = min(source.shape[-1], target.shape[-1])
+            source = source[..., :min_len]
+            target = target[..., :min_len]
+
+        window_size = int(sr * (window_ms / 1000.0))
+        if window_size % 2 == 0:
+            window_size += 1
+
+        # Calculate Amplitude Envelopes (RMS)
+        # Using Average Pooling as a robust proxy for RMS windowing
+        # Pad to keep dimensions same
+        pad = window_size // 2
+
+        # Helper to compute envelope
+        def compute_envelope(waveform, win_size, padding):
+            # Abs -> AvgPool -> Sqrt (RMS approximation via Avg of Abs, close enough for dynamics)
+            # Actually, let's do real RMS: Square -> AvgPool -> Sqrt
+            squared = waveform ** 2
+            # Use avg_pool1d
+            # Input needs to be [Batch, Channel, Time]. We have [Channel, Time].
+            # Add batch dim
+            squared = squared.unsqueeze(0)
+
+            # stride=1 for sliding window
+            # padding=pad to maintain size
+            envelope = torch.nn.functional.avg_pool1d(squared, kernel_size=win_size, stride=1, padding=padding, count_include_pad=False)
+            envelope = torch.sqrt(envelope + 1e-8) # epsilon for stability
+            return envelope.squeeze(0)
+
+        env_source = compute_envelope(source, window_size, pad)
+        env_target = compute_envelope(target, window_size, pad)
+
+        # Calculate Gain Map
+        # Gain = Source / Target
+        # Add epsilon to target to avoid div by zero
+        gain = env_source / (env_target + 1e-6)
+
+        # Apply Gain
+        matched_waveform = target * gain
+
+        # Limit gain extreme peaks (safety clip, optional but good practice)
+        # If gain is massive (silence in upscaled vs sound in source), it can pop.
+        # But generally source/target are aligned.
+
+        return matched_waveform
+
     def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
         Runs super_resolution on a batch of files to maximize GPU usage.
@@ -353,6 +410,13 @@ class UpscalerService:
                  logger.warning(f"Unsupported channel count {channels}. Downmixing to mono.")
                  waveform = torch.mean(waveform, dim=0, keepdim=True)
                  upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
+
+            # --- Global Envelope Matching (Parent-Child) ---
+            # Ensure matched length/SR
+            # We already resampled 'waveform' (original) to 48k at the start.
+            # Upscaled waveform is 48k.
+            if upscaled_waveform is not None:
+                upscaled_waveform = self._match_envelope(waveform, upscaled_waveform, sr, window_ms=100)
 
             logger.info(f"Generated waveform shape: {upscaled_waveform.shape}, dtype: {upscaled_waveform.dtype}, device: {upscaled_waveform.device}")
 
