@@ -416,24 +416,9 @@ class UpscalerService:
                     hybrid_audio = dsp.process_stems(stems_map, temp_wav, params=dsp_params, sample_rate=target_sample_rate)
 
                 # 4. Envelope Matching (Dynamics Restoration)
-                # Load original to get envelope reference
-                data, sr = sf.read(input_path)
-                if data.ndim == 1:
-                    data = data[None, :]
-                else:
-                    data = data.T # (C, S)
-
-                # Convert to Torch for envelope matching function
-                original_tensor = torch.from_numpy(data).float()
-                hybrid_tensor = torch.from_numpy(hybrid_audio).float()
-
-                # Resample original if needed to match hybrid output rate (for correct envelope calc)
-                if sr != target_sample_rate:
-                    resampler = torchaudio.transforms.Resample(orig_freq=sr, new_freq=target_sample_rate)
-                    original_tensor = resampler(original_tensor)
-
-                # Match Envelope
-                matched_waveform = self._match_envelope(original_tensor, hybrid_tensor, target_sample_rate, window_ms=100)
+                # Skip for Hybrid mode to avoid "pumping" (since mix balance has intentionally changed)
+                # The DSP chain already includes a Limiter for safety.
+                matched_waveform = torch.from_numpy(hybrid_audio).float()
 
                 # 5. Save Final Output
                 # Determine subtype
