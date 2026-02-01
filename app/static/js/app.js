@@ -29,6 +29,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const statusBadge = document.getElementById('status-badge');
     const downloadBtn = document.getElementById('download-current');
 
+    // Quality Presets
+    const qualityPreset = document.getElementById('quality-preset');
+    const ddimSteps = document.getElementById('ddim-steps');
+    const guidanceScale = document.getElementById('guidance-scale');
+    const guidanceValue = document.getElementById('guidance-value');
+
     // Initialize Wavesurfer
     wavesurfer = WaveSurfer.create({
         container: '#waveform',
@@ -45,6 +51,47 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Icons initialization
     const refreshIcons = () => lucide.createIcons();
+
+    // Quality Preset Logic
+    if (qualityPreset) {
+        qualityPreset.onchange = () => {
+            const preset = qualityPreset.value;
+            if (preset === 'fast') {
+                ddimSteps.value = 25;
+                guidanceScale.value = 3.5;
+                ddimSteps.disabled = true;
+                guidanceScale.disabled = true;
+                ddimSteps.classList.add('opacity-50');
+                guidanceScale.classList.add('opacity-50');
+            } else if (preset === 'balanced') {
+                ddimSteps.value = 50;
+                guidanceScale.value = 3.5;
+                ddimSteps.disabled = true;
+                guidanceScale.disabled = true;
+                ddimSteps.classList.add('opacity-50');
+                guidanceScale.classList.add('opacity-50');
+            } else if (preset === 'high') {
+                ddimSteps.value = 100;
+                guidanceScale.value = 3.5;
+                ddimSteps.disabled = true;
+                guidanceScale.disabled = true;
+                ddimSteps.classList.add('opacity-50');
+                guidanceScale.classList.add('opacity-50');
+            } else if (preset === 'custom') {
+                ddimSteps.disabled = false;
+                guidanceScale.disabled = false;
+                ddimSteps.classList.remove('opacity-50');
+                guidanceScale.classList.remove('opacity-50');
+            }
+            guidanceValue.textContent = guidanceScale.value;
+        };
+    }
+
+    if (guidanceScale) {
+        guidanceScale.oninput = () => {
+            guidanceValue.textContent = guidanceScale.value;
+        };
+    }
 
     // Library Functions
     async function fetchLibrary() {
@@ -212,11 +259,21 @@ document.addEventListener('DOMContentLoaded', () => {
         const sr = document.getElementById('target-sr').value;
         const bitrate = document.getElementById('target-bitrate').value;
 
+        // Fetch values from preset or inputs
+        const steps = document.getElementById('ddim-steps').value;
+        const guidance = document.getElementById('guidance-scale').value;
+
         try {
             const response = await fetch(`/process/${id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ format, sample_rate: sr, bitrate: bitrate })
+                body: JSON.stringify({
+                    format,
+                    sample_rate: sr,
+                    bitrate: bitrate,
+                    steps: steps,
+                    guidance: guidance
+                })
             });
 
             if (response.ok) {
