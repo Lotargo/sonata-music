@@ -181,6 +181,25 @@ class UpscalerService:
 
         return matched_waveform
 
+    def _match_global_rms(self, source, target):
+        """
+        Matches the global RMS (loudness) of target to source.
+        Does not affect dynamics (no pumping), just overall volume.
+        """
+        logger.info("Applying Global RMS Normalization...")
+
+        # Calculate RMS
+        rms_source = torch.sqrt(torch.mean(source**2) + 1e-8)
+        rms_target = torch.sqrt(torch.mean(target**2) + 1e-8)
+
+        gain = rms_source / (rms_target + 1e-6)
+
+        # Apply gentle clamping to gain to prevent massive jumps if target is silent
+        gain = torch.clamp(gain, 0.1, 10.0)
+
+        logger.info(f"RMS Match: Source={rms_source:.4f}, Target={rms_target:.4f}, Gain={gain:.4f}")
+        return target * gain
+
     def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
         Runs super_resolution on a batch of files to maximize GPU usage.
@@ -416,9 +435,20 @@ class UpscalerService:
                     hybrid_audio = dsp.process_stems(stems_map, temp_wav, params=dsp_params, sample_rate=target_sample_rate)
 
                 # 4. Envelope Matching (Dynamics Restoration)
-                # Skip for Hybrid mode to avoid "pumping" (since mix balance has intentionally changed)
-                # The DSP chain already includes a Limiter for safety.
-                matched_waveform = torch.from_numpy(hybrid_audio).float()
+                # Load original to get reference
+                data, sr = sf.read(input_path)
+                if data.ndim == 1:
+                    data = data[None, :]
+                else:
+                    data = data.T # (C, S)
+
+                # Convert to Torch
+                original_tensor = torch.from_numpy(data).float()
+                hybrid_tensor = torch.from_numpy(hybrid_audio).float()
+
+                # Use Global RMS Normalization for Hybrid Mode
+                # This fixes "jumping volume" (pumping) while ensuring overall loudness matches original
+                matched_waveform = self._match_global_rms(original_tensor, hybrid_tensor)
 
                 # 5. Save Final Output
                 # Determine subtype
