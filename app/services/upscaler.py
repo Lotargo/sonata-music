@@ -669,7 +669,7 @@ class UpscalerService:
                 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
                 debug_dir = os.path.join(project_root, "debug_output")
 
-                # logger.info(f"Debug directory: {debug_dir}") # For verification
+                logger.info(f"Debug directory: {debug_dir}")
                 os.makedirs(debug_dir, exist_ok=True)
 
                 base_name = os.path.basename(output_path).rsplit('.', 1)[0]
@@ -679,9 +679,11 @@ class UpscalerService:
                 abs_input = os.path.abspath(input_path)
                 abs_output = os.path.abspath(output_path)
 
+                print(f"DEBUG: Generating metrics report for {abs_output}...")
                 metrics_service.generate_report(abs_input, abs_output, debug_path_base)
             except Exception as e:
                 # Log strictly as error to ensure visibility even if INFO is suppressed
+                print(f"DEBUG: Failed to generate metrics: {e}")
                 logger.error(f"Failed to generate metrics/plot: {e}")
                 traceback.print_exc()
 

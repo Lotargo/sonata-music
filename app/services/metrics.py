@@ -75,8 +75,11 @@ class MetricsService:
                 json.dump(report, f, indent=4)
 
             # Generate Plot
-            self._generate_plot(data_orig, data_proc, sr_orig, sr_proc, output_base_path + "_comparison.png")
+            plot_path = output_base_path + "_comparison.png"
+            self._generate_plot(data_orig, data_proc, sr_orig, sr_proc, plot_path)
 
+            print(f"DEBUG: Saved metrics to {json_path}")
+            print(f"DEBUG: Saved plot to {plot_path}")
             return json_path
 
         except Exception as e:
