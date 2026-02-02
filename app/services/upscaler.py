@@ -525,25 +525,38 @@ class UpscalerService:
                 logger.info("Restoration Step 2: VoiceFixer...")
                 self.load_vf_model()
 
-                # VoiceFixer needs file input/output usually or tensor.
-                # To be safe and avoid tensor shape hell, use temp files.
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_in, \
-                     tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_out:
+                # Use temp files, but close them immediately to avoid Windows locking issues
+                tf_in_path = None
+                tf_out_path = None
 
-                    # Write input
-                    sf.write(tf_in.name, cleaned_1.T, sr)
+                try:
+                    # Create input temp file
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_in:
+                        tf_in_path = tf_in.name
+
+                    # Create output temp file path (VoiceFixer will write to it)
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_out:
+                        tf_out_path = tf_out.name
+                    # We just needed the name, ensuring it's closed now
+
+                    # Write input data
+                    sf.write(tf_in_path, cleaned_1.T, sr)
 
                     # Run VoiceFixer
                     # mode=0: Clean and expand bandwidth
-                    self.vf_model.restore(input=tf_in.name, output=tf_out.name, cuda=(self.device=="cuda"), mode=0)
+                    self.vf_model.restore(input=tf_in_path, output=tf_out_path, cuda=(self.device=="cuda"), mode=0)
 
                     # Read back
-                    data_vf, sr_vf = sf.read(tf_out.name)
-                    # Clean temp
-                    try: os.remove(tf_in.name)
-                    except: pass
-                    try: os.remove(tf_out.name)
-                    except: pass
+                    data_vf, sr_vf = sf.read(tf_out_path)
+
+                finally:
+                    # Robust cleanup
+                    if tf_in_path and os.path.exists(tf_in_path):
+                        try: os.remove(tf_in_path)
+                        except: pass
+                    if tf_out_path and os.path.exists(tf_out_path):
+                        try: os.remove(tf_out_path)
+                        except: pass
 
                 # Ensure (Channels, Samples)
                 if data_vf.ndim == 1:
@@ -562,12 +575,15 @@ class UpscalerService:
                 # Separate -> Sum
                 logger.info("Restoration Step 4: Demucs Structure Enhance...")
 
-                # We need to save polished to disk for Demucs
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_polish:
-                    sf.write(tf_polish.name, polished.T, sr)
-                    polish_path = tf_polish.name
-
+                polish_path = None
                 try:
+                    # Create temp file for polished audio (Windows-safe)
+                    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_polish:
+                        polish_path = tf_polish.name
+
+                    # Write data
+                    sf.write(polish_path, polished.T, sr)
+
                     with tempfile.TemporaryDirectory() as stem_dir:
                         stems = separator.separate_track(polish_path, stem_dir)
 
@@ -595,8 +611,9 @@ class UpscalerService:
                             final_mix += s_data
 
                 finally:
-                    if os.path.exists(polish_path):
-                        os.remove(polish_path)
+                    if polish_path and os.path.exists(polish_path):
+                        try: os.remove(polish_path)
+                        except: pass
 
                 # 6. Save Final
                 # Resample if target_sample_rate differs
