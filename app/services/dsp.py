@@ -294,8 +294,9 @@ class StudioDSP:
                 mix += audio
 
             # Apply Headroom (Gain Staging) before Master Chain
-            # Reduce mix by -6dB to prevent limiter "choking" / flattening
-            mix = mix * 0.5
+            # Reduce mix by -9dB (0.35) to prevent limiter "choking" / flattening
+            # (Global RMS match in upscaler will restore volume later)
+            mix = mix * 0.35
 
             # Apply Master Glue (The "Balanced" chain we just fixed)
             # Use provided params or default to mastering
