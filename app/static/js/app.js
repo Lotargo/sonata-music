@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const modeAiBtn = document.getElementById('mode-ai');
     const modeDspBtn = document.getElementById('mode-dsp');
     const modeHybridBtn = document.getElementById('mode-hybrid');
+    const modeRestorationBtn = document.getElementById('mode-restoration');
     const processingModeInput = document.getElementById('processing-mode');
     const modeDesc = document.getElementById('mode-desc');
     const aiSettings = document.getElementById('ai-settings');
@@ -183,21 +184,32 @@ document.addEventListener('DOMContentLoaded', () => {
         modeAiBtn.onclick = () => setMode('ai');
         modeDspBtn.onclick = () => setMode('dsp');
         modeHybridBtn.onclick = () => setMode('hybrid');
+        if (modeRestorationBtn) modeRestorationBtn.onclick = () => setMode('restoration');
     }
 
     function setMode(mode) {
         processingModeInput.value = mode;
 
         // Reset all buttons
-        [modeAiBtn, modeDspBtn, modeHybridBtn].forEach(btn => {
-            btn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
-            btn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
+        const buttons = [modeAiBtn, modeDspBtn, modeHybridBtn, modeRestorationBtn];
+        buttons.forEach(btn => {
+            if (btn) {
+                btn.classList.remove('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+                btn.classList.add('text-slate-400', 'font-medium', 'hover:text-white');
+            }
         });
 
         // Activate selected
-        const activeBtn = mode === 'ai' ? modeAiBtn : (mode === 'dsp' ? modeDspBtn : modeHybridBtn);
-        activeBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
-        activeBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
+        let activeBtn;
+        if (mode === 'ai') activeBtn = modeAiBtn;
+        else if (mode === 'dsp') activeBtn = modeDspBtn;
+        else if (mode === 'hybrid') activeBtn = modeHybridBtn;
+        else if (mode === 'restoration') activeBtn = modeRestorationBtn;
+
+        if (activeBtn) {
+            activeBtn.classList.add('bg-indigo-600', 'text-white', 'font-bold', 'shadow-sm');
+            activeBtn.classList.remove('text-slate-400', 'font-medium', 'hover:text-white');
+        }
 
         if (mode === 'ai') {
             aiSettings.classList.remove('hidden');
@@ -207,6 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
              aiSettings.classList.add('hidden');
              dspSettings.classList.remove('hidden'); // Hybrid uses DSP settings
              modeDesc.textContent = "Separates vocals/instruments, cleans harshness, and polishes each part individually. Best for distorted/complex tracks.";
+        } else if (mode === 'restoration') {
+             aiSettings.classList.add('hidden');
+             dspSettings.classList.add('hidden');
+             modeDesc.textContent = "Multi-stage restoration: RNNoise (clean) -> VoiceFixer (restore) -> DSP Polish -> Demucs Enhance.";
         } else {
             dspSettings.classList.remove('hidden');
             aiSettings.classList.add('hidden');

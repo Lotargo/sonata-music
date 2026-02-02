@@ -67,6 +67,8 @@ def run_upscaling(app, track_id, format, sample_rate, bitrate, steps, guidance, 
                 suffix = "_dsp"
             elif mode == "hybrid":
                 suffix = "_hybrid"
+            elif mode == "restoration":
+                suffix = "_restored"
             else:
                 suffix = "_ai"
             output_filename = f"{base}{suffix}.{format}"
