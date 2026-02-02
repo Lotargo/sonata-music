@@ -20,4 +20,5 @@ app = create_app()
 if __name__ == '__main__':
     # Disable reloader to prevent server restart during processing
     # when internal libraries like resampy access files.
+    logging.getLogger(__name__).info("Server starting on http://0.0.0.0:5000")
     app.run(debug=True, use_reloader=False, host='0.0.0.0', port=5000)
