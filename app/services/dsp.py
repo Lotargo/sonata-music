@@ -160,12 +160,10 @@ class StudioDSP:
 
             audio = data.astype(np.float32)
 
-            # Pre-gain normalization to roughly -6dB to ensure consistent processing
-            max_val = np.max(np.abs(audio))
-            if max_val > 0:
-                 # target -6dB = 0.5
-                 target = 0.5
-                 audio = audio * (target / max_val)
+            # Pre-gain: Reduce input by -3dB to -6dB to create headroom before processing
+            # Instead of normalizing UP to -6dB (which boosts quiet tracks), we just attenuate.
+            # If the track is already loud (0dB), this brings it to -3dB.
+            audio = audio * 0.707 # -3dB attenuation
 
             # 3. Resample
             if sr != sample_rate:
@@ -335,6 +333,10 @@ class StudioDSP:
             # Ensure audio is (channels, samples)
             if audio.ndim == 1:
                 audio = audio[np.newaxis, :]
+
+            # Pre-gain: Reduce mix gain significantly (-6dB) before processing
+            # The input 'audio' here is a SUM of 4 stems, so it is likely clipped/hot > 0dB.
+            audio = audio * 0.5
 
             # 1. Apply Stereo Widener First (NumPy)
             # Gentle widening to fix narrow AI stereo field
