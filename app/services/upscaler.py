@@ -13,6 +13,7 @@ import audiosr.pipeline
 import soundfile as sf
 import numpy as np
 from pydub import AudioSegment
+from tqdm import tqdm
 from app.services.dsp import dsp
 from app.services.separator import separator
 
@@ -317,9 +318,8 @@ class UpscalerService:
                 segments_info.append({"start": start, "end": end, "path": temp_seg_path})
 
             # 2. Process in Batches
-            for i in range(0, len(segments_info), batch_size):
+            for i in tqdm(range(0, len(segments_info), batch_size), desc="Upscaling Batches", unit="batch"):
                 batch_files = [s["path"] for s in segments_info[i : i + batch_size]]
-                logger.info(f"Processing batch {i // batch_size + 1}/{(len(segments_info) + batch_size - 1) // batch_size}")
 
                 try:
                     # Run batch inference

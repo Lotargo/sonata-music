@@ -59,7 +59,7 @@ class SeparatorService:
 
             # 3. Inference
             # shifts=2 for better quality (Bagging) as requested
-            sources = apply_model(model, wav, shifts=2, split=True, overlap=0.25, progress=False)[0]
+            sources = apply_model(model, wav, shifts=2, split=True, overlap=0.25, progress=True)[0]
 
             # sources shape: (4, 2, samples) -> [drums, bass, other, vocals] order usually
             # But demucs.apply returns sources in the order of model.sources

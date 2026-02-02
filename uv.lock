@@ -74,6 +74,7 @@ dependencies = [
     { name = "soundfile" },
     { name = "torch" },
     { name = "torchaudio" },
+    { name = "tqdm" },
 ]
 
 [package.metadata]
@@ -92,6 +93,7 @@ requires-dist = [
     { name = "soundfile", specifier = ">=0.12.1" },
     { name = "torch", specifier = ">=2.10.0" },
     { name = "torchaudio", specifier = ">=2.10.0" },
+    { name = "tqdm", specifier = ">=4.67.2" },
 ]
 
 [[package]]

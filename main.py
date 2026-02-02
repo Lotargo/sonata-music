@@ -9,6 +9,11 @@ warnings.filterwarnings("ignore", message=".*pkg_resources is deprecated.*")
 warnings.filterwarnings("ignore", category=FutureWarning, module="huggingface_hub")
 
 from app import create_app
+import logging
+
+# Configure werkzeug logging to ERROR only (suppress INFO requests)
+log = logging.getLogger('werkzeug')
+log.setLevel(logging.ERROR)
 
 app = create_app()
 
