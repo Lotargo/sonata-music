@@ -324,55 +324,58 @@ class StudioDSP:
             logger.error(f"Hybrid stem processing failed: {e}")
             raise e
 
-    def apply_restoration_polish(self, audio, sample_rate, params=None):
+    def apply_suno_restoration(self, audio, sample_rate, params=None):
         """
-        Applies a 'Polishing' chain specifically for the Restoration pipeline.
-        Chain: Gentle EQ (Anti-Harsh), De-esser (Approx), Compressor (Smoothing), Saturation (Exciter).
+        Applies a 'Enhancement' chain specifically for Suno/MP3 restoration.
+        Chain: De-mud EQ, Exciter, Stereo Widen, Glue Compressor.
         """
-        logger.info("Applying Restoration Polish Chain...")
+        logger.info("Applying Suno Restoration Chain...")
 
         try:
             # Ensure audio is (channels, samples)
             if audio.ndim == 1:
                 audio = audio[np.newaxis, :]
 
-            # 1. Build Chain
+            # 1. Apply Stereo Widener First (NumPy)
+            # Gentle widening to fix narrow AI stereo field
+            audio = self._apply_stereo_width(audio, 1.15)
+
+            # 2. Build Pedalboard Chain
             board = Pedalboard()
 
-            # --- Gentle EQ ---
-            # Cut low rumble
+            # --- EQ: Cleanup & De-mud ---
+            # Cut non-musical rumble
             board.append(HighpassFilter(cutoff_frequency_hz=30))
+            # Cut "Mud" / Boxiness (common in Suno generation)
+            board.append(PeakFilter(cutoff_frequency_hz=350, gain_db=-2.5, q=1.0))
 
-            # Anti-Harshness: Cut 3.5kHz slightly
-            board.append(PeakFilter(cutoff_frequency_hz=3500, gain_db=-2.0, q=1.0))
+            # --- EQ: Air & Presence ---
+            # Add "Air" to compensate for MP3 high-end rolloff
+            board.append(HighShelfFilter(cutoff_frequency_hz=10000, gain_db=1.5))
 
-            # De-esser Approximation: Static cut in sibilance range (7kHz)
-            # A real de-esser is dynamic, but a gentle static cut helps "remove neuro garbage"
-            board.append(PeakFilter(cutoff_frequency_hz=7000, gain_db=-2.5, q=2.0))
+            # --- Harmonic Exciter ---
+            # Very subtle saturation to generate missing harmonics
+            board.append(Distortion(drive_db=0.5))
 
-            # --- Soft Harmonic Exciter ---
-            # Very subtle distortion to add warmth/harmonics
-            board.append(Distortion(drive_db=1.0))
-
-            # --- Dynamic Range Smoothing (Compressor) ---
-            # Slow attack to preserve transients, low ratio for transparent smoothing
+            # --- Glue Compressor ---
+            # "Mastering" style glue to bring elements together after separation
             board.append(Compressor(
                 threshold_db=-12,
-                ratio=2.0,
-                attack_ms=40,   # Preserve initial transient
-                release_ms=200  # Smooth release
+                ratio=2.5,
+                attack_ms=15,   # Moderate attack to catch peaks but keep punch
+                release_ms=150  # Moderate release for musical breathing
             ))
 
             # --- Safety Limiter ---
             board.append(Limiter(threshold_db=-0.1))
 
-            # 2. Process
+            # 3. Process
             processed = board(audio, sample_rate)
 
             return processed
 
         except Exception as e:
-            logger.error(f"Restoration polish failed: {e}")
+            logger.error(f"Suno restoration polish failed: {e}")
             raise e
 
 # Create singleton

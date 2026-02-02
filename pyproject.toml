@@ -19,8 +19,6 @@ dependencies = [
     "pedalboard (>=0.9.21,<0.10.0)",
     "resampy (>=0.4.3,<0.5.0)",
     "demucs>=4.0.1",
-    "voicefixer>=0.1.2",
-    "noisereduce>=3.0.0",
 ]
 
 [[tool.poetry.source]]
