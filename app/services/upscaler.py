@@ -16,6 +16,7 @@ from pydub import AudioSegment
 from tqdm import tqdm
 from app.services.dsp import dsp
 from app.services.separator import separator
+from app.services.metrics import metrics_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -654,6 +655,19 @@ class UpscalerService:
                     self._convert_format(temp_wav, output_path, target_format, target_bitrate)
                     if temp_wav and os.path.exists(temp_wav) and temp_wav != output_path:
                         os.remove(temp_wav)
+
+            # --- Generate Diagnostics/Metrics ---
+            try:
+                # Ensure debug directory exists
+                debug_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(output_path))), "debug_output")
+                os.makedirs(debug_dir, exist_ok=True)
+
+                base_name = os.path.basename(output_path).rsplit('.', 1)[0]
+                debug_path_base = os.path.join(debug_dir, base_name)
+
+                metrics_service.generate_report(input_path, output_path, debug_path_base)
+            except Exception as e:
+                logger.error(f"Failed to generate metrics/plot: {e}")
 
             logger.info(f"Successfully saved upscaled audio to {output_path}. Final file size: {os.path.getsize(output_path) / (1024*1024):.2f} MB")
             return True
