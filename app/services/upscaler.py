@@ -12,7 +12,9 @@ import audiosr.utils
 import audiosr.pipeline
 import soundfile as sf
 import numpy as np
+import noisereduce as nr
 from pydub import AudioSegment
+from voicefixer import VoiceFixer
 from app.services.dsp import dsp
 from app.services.separator import separator
 
@@ -68,6 +70,7 @@ class UpscalerService:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = None
+        self.vf_model = None
         self.ffmpeg_available = self._check_ffmpeg()
         logger.info(f"UpscalerService initialized on {self.device}. FFmpeg available: {self.ffmpeg_available}")
 
@@ -87,6 +90,16 @@ class UpscalerService:
                 logger.info("AudioSR model loaded successfully.")
             except Exception as e:
                 logger.error(f"Failed to load AudioSR model: {e}")
+                raise e
+
+    def load_vf_model(self):
+        if self.vf_model is None:
+            logger.info("Loading VoiceFixer model...")
+            try:
+                self.vf_model = VoiceFixer()
+                logger.info("VoiceFixer model loaded.")
+            except Exception as e:
+                logger.error(f"Failed to load VoiceFixer: {e}")
                 raise e
 
     def _convert_format(self, input_wav, output_path, target_format, bitrate_str):
@@ -138,6 +151,11 @@ class UpscalerService:
             logger.info("Unloading AudioSR model to free resources...")
             del self.model
             self.model = None
+
+        if self.vf_model is not None:
+            logger.info("Unloading VoiceFixer model...")
+            del self.vf_model
+            self.vf_model = None
 
         # Force garbage collection
         gc.collect()
@@ -467,6 +485,131 @@ class UpscalerService:
                     if not self.ffmpeg_available:
                         logger.error("FFmpeg not found! Cannot convert to lossy formats.")
                     else:
+                        self._convert_format(temp_wav, output_path, target_format, target_bitrate)
+                        if os.path.exists(temp_wav) and temp_wav != output_path:
+                            os.remove(temp_wav)
+
+                return True
+
+            # --- RESTORATION MODE (RNNoise + VoiceFixer + DSP Polish + Demucs Enhance) ---
+            if mode == "restoration":
+                if target_format.lower() == "wav":
+                    temp_wav = output_path
+                else:
+                    temp_wav = output_path + ".tmp.wav"
+
+                # 1. Load Audio
+                data, sr = sf.read(input_path)
+                # Ensure (Channels, Samples)
+                if data.ndim == 1:
+                    data = data[None, :]
+                else:
+                    data = data.T
+
+                # Resample to 44100 (VoiceFixer prefers 44.1k usually, let's stick to standard)
+                # But RNNoise usually wants 48k or 16k? noisereduce works on any.
+                # Let's target 44100 for the whole chain to match VoiceFixer's typical output
+                target_sr = 44100
+                if sr != target_sr:
+                     import resampy
+                     data = resampy.resample(data, sr, target_sr, axis=1)
+                     sr = target_sr
+
+                # 2. RNNoise (noisereduce - Stationary Noise Removal)
+                logger.info("Restoration Step 1: RNNoise (noisereduce)...")
+                # noisereduce expects (channels, samples) or (samples,)
+                # If stereo, it handles it.
+                cleaned_1 = nr.reduce_noise(y=data, sr=sr, stationary=True)
+
+                # 3. VoiceFixer
+                logger.info("Restoration Step 2: VoiceFixer...")
+                self.load_vf_model()
+
+                # VoiceFixer needs file input/output usually or tensor.
+                # To be safe and avoid tensor shape hell, use temp files.
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_in, \
+                     tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_out:
+
+                    # Write input
+                    sf.write(tf_in.name, cleaned_1.T, sr)
+
+                    # Run VoiceFixer
+                    # mode=0: Clean and expand bandwidth
+                    self.vf_model.restore(input=tf_in.name, output=tf_out.name, cuda=(self.device=="cuda"), mode=0)
+
+                    # Read back
+                    data_vf, sr_vf = sf.read(tf_out.name)
+                    # Clean temp
+                    try: os.remove(tf_in.name)
+                    except: pass
+                    try: os.remove(tf_out.name)
+                    except: pass
+
+                # Ensure (Channels, Samples)
+                if data_vf.ndim == 1:
+                    data_vf = data_vf[None, :]
+                else:
+                    data_vf = data_vf.T
+
+                # VoiceFixer might change SR to 44100
+                sr = sr_vf
+
+                # 4. DSP Polish
+                logger.info("Restoration Step 3: DSP Polish...")
+                polished = dsp.apply_restoration_polish(data_vf, sr)
+
+                # 5. Demucs Enhance (Structure Aware)
+                # Separate -> Sum
+                logger.info("Restoration Step 4: Demucs Structure Enhance...")
+
+                # We need to save polished to disk for Demucs
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tf_polish:
+                    sf.write(tf_polish.name, polished.T, sr)
+                    polish_path = tf_polish.name
+
+                try:
+                    with tempfile.TemporaryDirectory() as stem_dir:
+                        stems = separator.separate_track(polish_path, stem_dir)
+
+                        # Sum stems
+                        final_mix = None
+                        max_len = 0
+
+                        # Read all stems
+                        loaded_stems = []
+                        for s_path in stems.values():
+                            s_data, s_sr = sf.read(s_path)
+                            if s_data.ndim == 1: s_data = s_data[None, :]
+                            else: s_data = s_data.T
+                            loaded_stems.append(s_data)
+                            if s_data.shape[1] > max_len: max_len = s_data.shape[1]
+
+                        # Initialize mix
+                        final_mix = np.zeros((loaded_stems[0].shape[0], max_len), dtype=np.float32)
+
+                        for s_data in loaded_stems:
+                            # Pad if needed
+                            if s_data.shape[1] < max_len:
+                                pad = np.zeros((s_data.shape[0], max_len - s_data.shape[1]), dtype=np.float32)
+                                s_data = np.concatenate([s_data, pad], axis=1)
+                            final_mix += s_data
+
+                finally:
+                    if os.path.exists(polish_path):
+                        os.remove(polish_path)
+
+                # 6. Save Final
+                # Resample if target_sample_rate differs
+                if sr != target_sample_rate:
+                    import resampy
+                    final_mix = resampy.resample(final_mix, sr, target_sample_rate, axis=1)
+
+                # Write
+                sf.write(temp_wav, final_mix.T, target_sample_rate)
+
+                # Convert
+                if target_format.lower() != "wav":
+                    if self.ffmpeg_available:
                         self._convert_format(temp_wav, output_path, target_format, target_bitrate)
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
