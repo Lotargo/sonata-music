@@ -6,6 +6,7 @@ from demucs.apply import apply_model
 from demucs.pretrained import get_model
 from demucs.audio import save_audio
 import soundfile as sf
+import resampy
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,15 @@ class SeparatorService:
             # 2. Read Audio
             # Demucs expects (channels, samples) tensor
             wav, sr = sf.read(input_path)
+
+            # Resample if needed to match model (usually 44100)
+            if sr != model.samplerate:
+                logger.info(f"Resampling input from {sr} to {model.samplerate} Hz for separation")
+                # wav is (samples, channels) or (samples,)
+                # resampy.resample default axis is 0, which matches samples dimension
+                wav = resampy.resample(wav, sr, model.samplerate, axis=0)
+                sr = model.samplerate
+
             wav = wav.astype('float32') # Ensure float32 for PyTorch
 
             # Handle Mono -> Stereo
