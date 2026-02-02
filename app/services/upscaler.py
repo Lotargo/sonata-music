@@ -446,9 +446,9 @@ class UpscalerService:
                 original_tensor = torch.from_numpy(data).float()
                 hybrid_tensor = torch.from_numpy(hybrid_audio).float()
 
-                # Use Global RMS Normalization for Hybrid Mode
-                # This fixes "jumping volume" (pumping) while ensuring overall loudness matches original
-                matched_waveform = self._match_global_rms(original_tensor, hybrid_tensor)
+                # Use Dynamic Envelope Matching for Hybrid Mode
+                # This restores the original volume contour/dynamics, fixing "brickwall" issues
+                matched_waveform = self._match_envelope(original_tensor, hybrid_tensor, target_sample_rate, window_ms=100)
 
                 # 5. Save Final Output
                 # Determine subtype
