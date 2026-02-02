@@ -380,6 +380,38 @@ class UpscalerService:
                      except:
                          pass
 
+    def _generate_metrics_report(self, input_path, output_path):
+        """Helper to generate metrics report, reusable across modes."""
+        try:
+            # Use absolute path to resolve project root correctly
+            # Assuming app structure: /project_root/app/services/upscaler.py
+            # We want /project_root/debug_output
+
+            # Resolve relative to THIS file to be safe
+            # upscaler.py is in app/services/ -> dirname is app/services
+            # .. -> app
+            # .. -> project_root
+            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            debug_dir = os.path.join(project_root, "debug_output")
+
+            logger.info(f"Debug directory: {debug_dir}")
+            os.makedirs(debug_dir, exist_ok=True)
+
+            base_name = os.path.basename(output_path).rsplit('.', 1)[0]
+            debug_path_base = os.path.join(debug_dir, base_name)
+
+            # Ensure paths are absolute for metrics service
+            abs_input = os.path.abspath(input_path)
+            abs_output = os.path.abspath(output_path)
+
+            print(f"DEBUG: Generating metrics report for {abs_output}...")
+            metrics_service.generate_report(abs_input, abs_output, debug_path_base)
+        except Exception as e:
+            # Log strictly as error to ensure visibility even if INFO is suppressed
+            print(f"DEBUG: Failed to generate metrics: {e}")
+            logger.error(f"Failed to generate metrics/plot: {e}")
+            traceback.print_exc()
+
     def process_track(self, input_path, output_path, mode="ai", ddim_steps=50, guidance_scale=3.5, seed=42,
                       target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=2,
                       dsp_preset="mastering", dsp_params=None):
@@ -414,6 +446,8 @@ class UpscalerService:
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
+                # Generate metrics before return
+                self._generate_metrics_report(input_path, output_path)
                 return True
 
             # --- HYBRID MODE (Demucs + DSP) ---
@@ -473,6 +507,8 @@ class UpscalerService:
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
+                # Generate metrics before return
+                self._generate_metrics_report(input_path, output_path)
                 return True
 
             # --- RESTORATION MODE (Suno Enhancer: Demucs Filter + DSP) ---
@@ -541,6 +577,8 @@ class UpscalerService:
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
+                # Generate metrics before return
+                self._generate_metrics_report(input_path, output_path)
                 return True
 
             # --- AI MODE ---
@@ -657,35 +695,7 @@ class UpscalerService:
                         os.remove(temp_wav)
 
             # --- Generate Diagnostics/Metrics ---
-            try:
-                # Use absolute path to resolve project root correctly
-                # Assuming app structure: /project_root/app/services/upscaler.py
-                # We want /project_root/debug_output
-
-                # Resolve relative to THIS file to be safe
-                # upscaler.py is in app/services/ -> dirname is app/services
-                # .. -> app
-                # .. -> project_root
-                project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-                debug_dir = os.path.join(project_root, "debug_output")
-
-                logger.info(f"Debug directory: {debug_dir}")
-                os.makedirs(debug_dir, exist_ok=True)
-
-                base_name = os.path.basename(output_path).rsplit('.', 1)[0]
-                debug_path_base = os.path.join(debug_dir, base_name)
-
-                # Ensure paths are absolute for metrics service
-                abs_input = os.path.abspath(input_path)
-                abs_output = os.path.abspath(output_path)
-
-                print(f"DEBUG: Generating metrics report for {abs_output}...")
-                metrics_service.generate_report(abs_input, abs_output, debug_path_base)
-            except Exception as e:
-                # Log strictly as error to ensure visibility even if INFO is suppressed
-                print(f"DEBUG: Failed to generate metrics: {e}")
-                logger.error(f"Failed to generate metrics/plot: {e}")
-                traceback.print_exc()
+            self._generate_metrics_report(input_path, output_path)
 
             logger.info(f"Successfully saved upscaled audio to {output_path}. Final file size: {os.path.getsize(output_path) / (1024*1024):.2f} MB")
             return True
