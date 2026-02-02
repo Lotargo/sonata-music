@@ -254,10 +254,14 @@ class StudioDSP:
             # 2. Drums/Bass Chain: Punch and Depth
             rhythm_board = Pedalboard()
             bass_boost = params.get('bass_boost', 0.0) if params else 0.0
-            if bass_boost != 0:
+            # Only apply boost if explicitly requested.
+            # Default "Balanced" preset usually has 0.0, so this stays neutral.
+            if bass_boost > 0:
                 rhythm_board.append(LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost))
-            # Gentle saturation for warmth
-            # rhythm_board.append(Distortion(drive_db=1.0))
+            elif bass_boost < 0:
+                 rhythm_board.append(LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost))
+
+            # Removed commented-out Distortion to ensure no accidental saturation
 
             # 3. Other (Synths) Chain: Width
             # (Handled via widener function usually, but we can do simple EQ here)
@@ -294,9 +298,10 @@ class StudioDSP:
                 mix += audio
 
             # Apply Headroom (Gain Staging) before Master Chain
-            # Reduce mix by -9dB (0.35) to prevent limiter "choking" / flattening
-            # (Global RMS match in upscaler will restore volume later)
-            mix = mix * 0.35
+            # Reduce mix significantly to prevent limiter "choking" / flattening when summing 4 stems.
+            # -12dB (0.25) provides more safety against inter-sample peaks than -9dB.
+            # (Dynamic Envelope Matching in upscaler will restore volume later, so we can be safe here)
+            mix = mix * 0.25
 
             # Apply Master Glue (The "Balanced" chain we just fixed)
             # Use provided params or default to mastering
