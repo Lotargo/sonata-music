@@ -483,8 +483,8 @@ class UpscalerService:
 
                 # Use Dynamic Envelope Matching for Hybrid Mode
                 # This restores the original volume contour/dynamics, fixing "brickwall" issues
-                # matched_waveform = self._match_envelope(original_tensor, hybrid_tensor, target_sample_rate, window_ms=100)
-                matched_waveform = hybrid_tensor # DISABLED FOR TESTING
+                matched_waveform = self._match_envelope(original_tensor, hybrid_tensor, target_sample_rate, window_ms=100)
+                # matched_waveform = hybrid_tensor # DISABLED FOR TESTING
 
                 # 5. Save Final Output
                 # Determine subtype
@@ -640,8 +640,7 @@ class UpscalerService:
 
             # --- Global Envelope Matching (Parent-Child) ---
             if upscaled_waveform is not None:
-                # upscaled_waveform = self._match_envelope(waveform, upscaled_waveform, sr, window_ms=100)
-                pass
+                upscaled_waveform = self._match_envelope(waveform, upscaled_waveform, sr, window_ms=100)
 
             logger.info(f"Generated waveform shape: {upscaled_waveform.shape}, dtype: {upscaled_waveform.dtype}, device: {upscaled_waveform.device}")
 
