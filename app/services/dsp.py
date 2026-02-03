@@ -90,7 +90,15 @@ class StudioDSP:
         # 2. EQ: Bass Boost
         bass_db = params.get("bass_boost", 0.0)
         if bass_db != 0:
-            board.append(LowShelfFilter(cutoff_frequency_hz=100, gain_db=bass_db))
+            # "Soft Bass" Logic: If boosting, use lower freq (65Hz) for depth instead of punch (100Hz)
+            # and add subtle saturation for warmth.
+            if bass_db > 0:
+                board.append(LowShelfFilter(cutoff_frequency_hz=65, gain_db=bass_db))
+                # Add "Tube" warmth (saturation) to bass
+                board.append(Distortion(drive_db=0.3))
+            else:
+                # Cutting bass: Use standard 100Hz to remove mud/punch
+                board.append(LowShelfFilter(cutoff_frequency_hz=100, gain_db=bass_db))
 
         # 3. EQ: Voice Clarity
         # Combination of cut in mud (300Hz) and boost in presence (3-5kHz)

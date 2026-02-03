@@ -62,6 +62,78 @@ def safe_read_wav_file(filename):
     waveform = audiosr.utils.pad_wav(waveform, target_length=int(48000 * pad_duration))
     return waveform, target_frame, pad_duration
 
+# Monkey-patch audiosr.lowpass.lowpass_filter to prevent Wn >= 1 crash
+# This occurs if AudioSR tries to lowpass a signal at/near Nyquist
+import audiosr.lowpass
+from scipy.signal import ellip
+
+def safe_lowpass_filter(waveform, cutoff_freq, sample_rate):
+    # Clamp cutoff to be strictly less than Nyquist
+    nyquist = sample_rate / 2
+    if cutoff_freq >= nyquist:
+        # If cutoff is >= Nyquist, we don't need to filter (it passes everything anyway)
+        # OR we clamp it to slightly below 1.0 (e.g. 0.99)
+        # However, audiosr logic expects a filtered return.
+        # Let's clamp to 0.99 * Nyquist to be safe and avoid the crash.
+        logger.warning(f"Clamping lowpass cutoff {cutoff_freq} to 0.99*Nyquist ({0.99*nyquist}) to avoid crash.")
+        cutoff_freq = 0.99 * nyquist
+
+    # Original logic (copied/adapted from audiosr)
+    # 0.1 dB ripple, 60 dB attenuation, order determined by ellip
+    # audiosr uses hardcoded order=6 usually? No, it calls ellip directly
+
+    # We can just call the original logic but with the safe cutoff
+    # Re-implementing the specific call from the traceback:
+    # sos = ellip(order, 0.1, 60, hi, btype="low", output="sos")
+
+    # Actually, we can just patch audiosr.lowpass.lowpass_filter
+    # But audiosr.lowpass.lowpass_filter takes (waveform, cutoff, sr)
+
+    order = 6 # Default in AudioSR seems to be implied or passed?
+    # Traceback: ellip(order, 0.1, 60, hi, ...) -> order comes from where?
+    # audiosr/lowpass.py:
+    # def lowpass_filter(waveform, cutoff_freq, sample_rate, order=6):
+
+    # Let's perform the filter manually with scipy to match audiosr but safe
+    from scipy.signal import sosfilt
+
+    # Wn = cutoff / nyquist
+    # sos = ellip(6, 0.1, 60, Wn, btype="low", output="sos")
+    # return sosfilt(sos, waveform)
+
+    # However, replacing the whole function is safer if we just invoke the original with modified args?
+    # No, easy way is to copy-paste the logic with the check.
+
+    # Since we can't easily call "original_lowpass" if we overwrite it,
+    # we implement the fix directly.
+
+    Wn = cutoff_freq / nyquist
+    if Wn >= 1:
+        Wn = 0.99
+
+    sos = ellip(6, 0.1, 60, Wn, btype="low", output="sos")
+
+    # Apply to tensor (AudioSR expects tensor input/output usually?)
+    # audiosr.lowpass.lowpass_filter takes torch.Tensor
+
+    is_tensor = torch.is_tensor(waveform)
+    if is_tensor:
+        device = waveform.device
+        dtype = waveform.dtype
+        waveform_np = waveform.cpu().numpy()
+    else:
+        waveform_np = waveform
+
+    filtered = sosfilt(sos, waveform_np, axis=-1)
+
+    if is_tensor:
+        return torch.from_numpy(filtered.copy()).to(device=device, dtype=dtype)
+    return filtered
+
+# Apply monkey patch to audiosr.lowpass
+logger.info("Applying monkey-patch to audiosr.lowpass.lowpass_filter")
+audiosr.lowpass.lowpass_filter = safe_lowpass_filter
+
 # Apply monkey patch to audiosr.utils
 logger.info("Applying monkey-patch to audiosr.utils.read_wav_file")
 audiosr.utils.read_wav_file = safe_read_wav_file
