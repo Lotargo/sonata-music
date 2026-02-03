@@ -582,11 +582,35 @@ class UpscalerService:
                 return True
 
             # --- AI MODE ---
+            # 1. DSP Pre-processing (Clean & Level before AI)
+            # This helps reduce AI hallucinations by feeding it a cleaner, leveled signal.
+            dsp_temp_wav = None
+            try:
+                logger.info("Step 1: Running DSP Pre-processing for AI...")
+                if target_format.lower() == "wav":
+                     dsp_temp_wav = output_path + ".dsp_pre.wav"
+                else:
+                     dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
+
+                # Apply DSP (EQ, Comp, Limiter) to input
+                # We force 48kHz here to match AudioSR expectation, saving a resample step later
+                dsp.process(input_path, dsp_temp_wav, preset_name=dsp_preset, params=dsp_params, sample_rate=48000)
+
+                # Update input_path to use the cleaned file for the rest of the pipeline
+                input_path = dsp_temp_wav
+
+            except Exception as e:
+                logger.error(f"DSP Pre-processing failed: {e}")
+                # Fallback to original input if DSP fails
+                if dsp_temp_wav and os.path.exists(dsp_temp_wav):
+                    os.remove(dsp_temp_wav)
+                dsp_temp_wav = None
+
             self.load_model()
 
             logger.info(f"AI Params: steps={ddim_steps}, guidance={guidance_scale}, seed={seed}, batch={batch_size}")
 
-            # Read file using soundfile
+            # Read file using soundfile (Reload in case input_path changed due to DSP)
             try:
                 data, sr = sf.read(input_path)
                 if data.ndim == 1:
@@ -617,19 +641,45 @@ class UpscalerService:
                 # Process Mono
                 upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
             elif channels == 2:
-                # Process Stereo - REVERTED TO LEFT/RIGHT PROCESSING
-                logger.info("Stereo detected. Processing Left Channel...")
-                left_channel = waveform[0:1, :]
-                out_left = self._process_channel_waveform(left_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
+                # Process Stereo using Mid-Side to preserve Phase/Width
+                logger.info("Stereo detected. Using Mid-Side processing...")
 
-                logger.info("Stereo detected. Processing Right Channel...")
-                right_channel = waveform[1:2, :]
-                out_right = self._process_channel_waveform(right_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
+                # 1. Convert to Mid-Side
+                # Mid = (L+R)/2, Side = (L-R)/2
+                mid_channel = (waveform[0:1, :] + waveform[1:2, :]) * 0.5
+                side_channel = (waveform[0:1, :] - waveform[1:2, :]) * 0.5
 
-                # Combine
-                min_len = min(out_left.shape[-1], out_right.shape[-1])
-                out_left = out_left[..., :min_len]
-                out_right = out_right[..., :min_len]
+                # 2. Upscale Mid Channel Only
+                # We trust AI to improve the "core" (Mid) information, but we keep Side original to prevent
+                # phase issues and "channel leakage" where AI hallucinates stereo width differently on L/R.
+                logger.info("Upscaling Mid Channel...")
+                mid_upscaled = self._process_channel_waveform(mid_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
+
+                # 3. Match Dynamics on Mid Channel (Essential)
+                # Restore the dynamics of the original Mid to the new High-Res Mid
+                mid_upscaled = self._match_envelope(mid_channel, mid_upscaled, sr, window_ms=100)
+
+                # 4. Handle Side Channel (Pass-through / Resample)
+                # We need side_channel to match the length and sample rate of mid_upscaled.
+                # Since we force 48k at input, sr should match, but lengths might differ due to OLA/padding.
+
+                # Ensure side matches mid length
+                target_len = mid_upscaled.shape[-1]
+                current_len = side_channel.shape[-1]
+
+                if current_len != target_len:
+                    # Pad or Trim
+                    if current_len > target_len:
+                        side_channel = side_channel[..., :target_len]
+                    else:
+                        pad = target_len - current_len
+                        side_channel = torch.nn.functional.pad(side_channel, (0, pad))
+
+                # 5. Reconstruct Stereo
+                # New L = Mid_New + Side_Orig
+                # New R = Mid_New - Side_Orig
+                out_left = mid_upscaled + side_channel
+                out_right = mid_upscaled - side_channel
 
                 upscaled_waveform = torch.cat([out_left, out_right], dim=0)
             else:
@@ -710,6 +760,12 @@ class UpscalerService:
             raise e
         finally:
             self.unload_model()
+            # Cleanup DSP temp file
+            if 'dsp_temp_wav' in locals() and dsp_temp_wav and os.path.exists(dsp_temp_wav):
+                try:
+                    os.remove(dsp_temp_wav)
+                except:
+                    pass
 
 # Create a singleton instance
 upscaler = UpscalerService()
