@@ -132,7 +132,9 @@ class StudioDSP:
             board.append(Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0))
 
         # 6. Limiter (Safety)
+        # Pedalboard Limiter caps at 0dB. We add Gain to enforce -1.0 dB safety ceiling.
         board.append(Limiter(threshold_db=-1.0))
+        board.append(Gain(gain_db=-1.0))
 
         return board
 
@@ -377,7 +379,9 @@ class StudioDSP:
             ))
 
             # --- Safety Limiter ---
+            # Pedalboard Limiter caps at 0dB. We add Gain to enforce -1.0 dB safety ceiling.
             board.append(Limiter(threshold_db=-1.0))
+            board.append(Gain(gain_db=-1.0))
 
             # 3. Process
             processed = board(audio, sample_rate)
