@@ -45,6 +45,26 @@ document.addEventListener('DOMContentLoaded', () => {
     const aiSettings = document.getElementById('ai-settings');
     const dspSettings = document.getElementById('dsp-settings');
     const dspPreset = document.getElementById('dsp-preset');
+    const dspLabel = document.getElementById('dsp-label');
+
+    // Details Modal
+    const detailsModal = document.getElementById('details-modal');
+    const closeDetails = document.getElementById('close-details');
+    const metricsBody = document.getElementById('metrics-body');
+    const waveOrigContainer = document.getElementById('wave-orig');
+    const waveProcContainer = document.getElementById('wave-proc');
+    const btnListenOrig = document.getElementById('btn-listen-orig');
+    const btnListenProc = document.getElementById('btn-listen-proc');
+    const comparePlayBtn = document.getElementById('compare-play');
+    const viewSplitBtn = document.getElementById('view-split');
+    const viewOverlayBtn = document.getElementById('view-overlay');
+    const waveOrigWrapper = document.getElementById('wave-orig-wrapper');
+    const waveProcWrapper = document.getElementById('wave-proc-wrapper');
+
+    let wsOrig = null;
+    let wsProc = null;
+    let detailsTrackId = null;
+    let activeCompareAudio = 'proc'; // 'orig' or 'proc'
 
     // DSP Advanced Controls
     const toggleDspAdvanced = document.getElementById('toggle-dsp-advanced');
@@ -213,20 +233,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (mode === 'ai') {
             aiSettings.classList.remove('hidden');
-            dspSettings.classList.add('hidden');
-            modeDesc.textContent = "Uses AudioSR AI to hallucinate missing high frequencies. Best for low-quality sources.";
+            dspSettings.classList.remove('hidden'); // Enable DSP for AI Pre-processing
+            if(dspLabel) dspLabel.textContent = "Pre-Processing DSP Preset (Optional)";
+            modeDesc.textContent = "Generative AI with DSP Pre-processing. Cleans audio first, then uses AI to hallucinate missing high frequencies (Mid-Side mode). Best for low-quality sources.";
         } else if (mode === 'hybrid') {
              aiSettings.classList.add('hidden');
              dspSettings.classList.remove('hidden'); // Hybrid uses DSP settings
-             modeDesc.textContent = "Separates vocals/instruments, cleans harshness, and polishes each part individually. Best for distorted/complex tracks.";
+             if(dspLabel) dspLabel.textContent = "Mastering DSP Preset";
+             modeDesc.textContent = "Separates stems, polishes them individually (DSP), and remixes with dynamic envelope matching. Best for complex, distorted tracks.";
         } else if (mode === 'restoration') {
              aiSettings.classList.add('hidden');
-             dspSettings.classList.add('hidden');
-             modeDesc.textContent = "Multi-stage restoration: RNNoise (clean) -> VoiceFixer (restore) -> DSP Polish -> Demucs Enhance.";
+             dspSettings.classList.add('hidden'); // Fixed chain
+             modeDesc.textContent = "Fixed 'Suno Enhancer' pipeline: Demucs Re-synthesis (De-artifact) -> Soft Bass & Air DSP Polish. No manual settings.";
         } else {
             dspSettings.classList.remove('hidden');
             aiSettings.classList.add('hidden');
-            modeDesc.textContent = "Uses professional DSP chain (EQ, Compression, Limiter) to polish audio without AI generation. Best for good sources.";
+            if(dspLabel) dspLabel.textContent = "DSP Preset";
+            modeDesc.textContent = "Uses professional DSP chain (Soft Bass, Exciter, Compression, Limiter) to polish audio without AI generation. Best for good sources.";
         }
     }
 
@@ -274,7 +297,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div class="flex items-center justify-between">
                         <div class="flex gap-2">
                             ${track.status === 'pending' || track.status === 'failed' ?
-                                `<button onclick="startProcessing(${track.id})" class="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded hover:bg-indigo-500 hover:text-white transition uppercase font-bold">Upscale</button>` : ''
+                                `<button onclick="startProcessing(${track.id})" class="text-[10px] bg-indigo-500/10 text-indigo-400 px-2 py-1 rounded hover:bg-indigo-500 hover:text-white transition uppercase font-bold">Upscale</button>` :
+                                `<button onclick="openDetails(${track.id})" class="text-[10px] bg-slate-700 text-slate-300 px-2 py-1 rounded hover:bg-slate-600 hover:text-white transition uppercase font-bold flex items-center gap-1"><i data-lucide="bar-chart-2" class="w-3 h-3"></i> Details</button>`
                             }
                         </div>
                         <div class="flex gap-1">
@@ -635,6 +659,228 @@ document.addEventListener('DOMContentLoaded', () => {
             setTimeout(() => toast.remove(), 300);
         }, 3000);
     }
+
+    // Details Modal Logic
+    if (closeDetails) {
+        closeDetails.onclick = () => {
+            detailsModal.classList.add('hidden');
+            if (wsOrig) wsOrig.destroy();
+            if (wsProc) wsProc.destroy();
+            wsOrig = null;
+            wsProc = null;
+        };
+    }
+
+    window.openDetails = async (id) => {
+        const track = tracks.find(t => t.id === id);
+        if (!track || track.status !== 'completed') return;
+        detailsTrackId = track.id;
+
+        // Reset UI
+        detailsModal.classList.remove('hidden');
+        document.getElementById('details-title').textContent = track.title;
+        metricsBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-slate-500">Loading metrics...</td></tr>';
+
+        // Fetch Metrics
+        try {
+            const res = await fetch(`/metrics/${id}`);
+            if (res.ok) {
+                const data = await res.json();
+                renderMetricsTable(data);
+
+                // Initialize Waveforms
+                initComparisonWaveforms(track, data);
+            } else {
+                metricsBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-red-400">Metrics not available.</td></tr>';
+            }
+        } catch (e) {
+            metricsBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-red-400">Error loading metrics.</td></tr>';
+        }
+    };
+
+    function renderMetricsTable(data) {
+        const orig = data.original;
+        const proc = data.processed;
+
+        document.getElementById('info-sr-orig').textContent = orig.sr + ' Hz';
+        document.getElementById('info-sr-proc').textContent = proc.sr + ' Hz';
+
+        const metrics = [
+            { label: 'Peak (dB)', key: 'peak_db', diff: true },
+            { label: 'RMS (dB)', key: 'rms_db', diff: true },
+            { label: 'Dynamic Range (dB)', key: 'dynamic_range_db', diff: true }
+        ];
+
+        metricsBody.innerHTML = metrics.map(m => {
+            const v1 = orig[m.key];
+            const v2 = proc[m.key];
+            const diff = (v2 - v1).toFixed(2);
+            const diffColor = diff > 0 ? 'text-green-400' : (diff < 0 ? 'text-red-400' : 'text-slate-500');
+            const diffSign = diff > 0 ? '+' : '';
+
+            return `
+                <tr class="hover:bg-white/5 transition">
+                    <td class="px-4 py-3 font-medium text-slate-300">${m.label}</td>
+                    <td class="px-4 py-3 font-mono text-slate-400">${v1}</td>
+                    <td class="px-4 py-3 font-mono text-white font-bold flex items-center gap-2">
+                        ${v2}
+                        <span class="text-xs ${diffColor} font-normal">(${diffSign}${diff})</span>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function initComparisonWaveforms(track, data) {
+        if (wsOrig) wsOrig.destroy();
+        if (wsProc) wsProc.destroy();
+
+        const commonOptions = {
+            height: 192, // Matches h-48
+            barWidth: 2,
+            barRadius: 2,
+            cursorWidth: 1,
+            responsive: true,
+            normalize: true,
+            partialRender: true,
+            interact: true
+        };
+
+        wsOrig = WaveSurfer.create({
+            ...commonOptions,
+            container: '#wave-orig',
+            waveColor: 'rgba(59, 130, 246, 0.5)', // Blue
+            progressColor: 'rgba(96, 165, 250, 0.5)',
+            cursorColor: '#60a5fa',
+        });
+
+        wsProc = WaveSurfer.create({
+            ...commonOptions,
+            container: '#wave-proc',
+            waveColor: 'rgba(34, 197, 94, 0.5)', // Green
+            progressColor: 'rgba(74, 222, 128, 0.5)',
+            cursorColor: '#4ade80',
+        });
+
+        // Load Audio
+        // Original needs URL: /uploads/filename
+        const origUrl = `/uploads/${track.filename}`;
+        const procUrl = `/library_files/${track.processed_path}`; // processed_path in JSON is basename
+
+        wsOrig.load(origUrl);
+        wsProc.load(procUrl);
+
+        // Sync Logic
+        let isSeeking = false;
+
+        wsOrig.on('seek', (p) => {
+            if(!isSeeking) { isSeeking=true; wsProc.seekTo(p); isSeeking=false; }
+        });
+        wsProc.on('seek', (p) => {
+            if(!isSeeking) { isSeeking=true; wsOrig.seekTo(p); isSeeking=false; }
+        });
+
+        wsOrig.on('play', () => wsProc.play());
+        wsOrig.on('pause', () => wsProc.pause());
+        wsProc.on('play', () => wsOrig.play());
+        wsProc.on('pause', () => wsOrig.pause());
+
+        // Play Button
+        comparePlayBtn.onclick = () => {
+            if(wsProc.isPlaying()) wsProc.pause();
+            else wsProc.play();
+            updateComparePlayIcon();
+        };
+
+        wsProc.on('play', updateComparePlayIcon);
+        wsProc.on('pause', updateComparePlayIcon);
+
+        // Default: Listen Processed
+        setCompareAudio('proc');
+    }
+
+    function updateComparePlayIcon() {
+        const isPlaying = wsProc && wsProc.isPlaying();
+        comparePlayBtn.innerHTML = isPlaying
+            ? '<i data-lucide="pause" class="fill-current w-5 h-5"></i>'
+            : '<i data-lucide="play" class="fill-current w-5 h-5 ml-1"></i>';
+        refreshIcons();
+    }
+
+    function setCompareAudio(source) {
+        activeCompareAudio = source;
+        if(source === 'orig') {
+            wsOrig.setMute(false);
+            wsProc.setMute(true);
+            btnListenOrig.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
+            btnListenOrig.classList.add('bg-blue-600', 'text-white', 'shadow-lg', 'shadow-blue-500/20');
+
+            btnListenProc.classList.add('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
+            btnListenProc.classList.remove('bg-indigo-600', 'hover:bg-indigo-700', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
+        } else {
+            wsOrig.setMute(true);
+            wsProc.setMute(false);
+            btnListenProc.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
+            btnListenProc.classList.add('bg-indigo-600', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
+
+            btnListenOrig.classList.add('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
+            btnListenOrig.classList.remove('bg-blue-600', 'text-white', 'shadow-lg', 'shadow-blue-500/20');
+        }
+    }
+
+    btnListenOrig.onclick = () => setCompareAudio('orig');
+    btnListenProc.onclick = () => setCompareAudio('proc');
+
+    // Visual Mode Toggle
+    viewSplitBtn.onclick = () => setVisualMode('split');
+    viewOverlayBtn.onclick = () => setVisualMode('overlay');
+
+    function setVisualMode(mode) {
+        if (mode === 'overlay') {
+            viewOverlayBtn.classList.add('bg-slate-700', 'text-white', 'shadow', 'font-medium');
+            viewOverlayBtn.classList.remove('text-slate-400');
+            viewSplitBtn.classList.remove('bg-slate-700', 'text-white', 'shadow', 'font-medium');
+            viewSplitBtn.classList.add('text-slate-400');
+
+            // Apply overlay CSS
+            // Containers are absolute by default in our HTML structure,
+            // but for split we might need to adjust height/position logic.
+            // Wait, HTML structure:
+            // #compare-container (h-48, relative)
+            //   #wave-orig-wrapper (absolute, full)
+            //   #wave-proc-wrapper (absolute, full)
+
+            // In Overlay mode: Both visible, full height, overlapping.
+            waveOrigWrapper.style.top = '0';
+            waveOrigWrapper.style.height = '100%';
+            waveProcWrapper.style.top = '0';
+            waveProcWrapper.style.height = '100%';
+            waveProcWrapper.style.opacity = '0.7'; // Blend
+
+        } else {
+            // Split mode
+            viewSplitBtn.classList.add('bg-slate-700', 'text-white', 'shadow', 'font-medium');
+            viewSplitBtn.classList.remove('text-slate-400');
+            viewOverlayBtn.classList.remove('bg-slate-700', 'text-white', 'shadow', 'font-medium');
+            viewOverlayBtn.classList.add('text-slate-400');
+
+            // Top half / Bottom half
+            waveOrigWrapper.style.top = '0';
+            waveOrigWrapper.style.height = '50%';
+            waveProcWrapper.style.top = '50%';
+            waveProcWrapper.style.height = '50%';
+            waveProcWrapper.style.opacity = '1';
+        }
+
+        // Redraw wavesurfer to fit new container dimensions
+        setTimeout(() => {
+            if(wsOrig) wsOrig.drawBuffer();
+            if(wsProc) wsProc.drawBuffer();
+        }, 300);
+    }
+
+    // Default visual mode
+    setVisualMode('split');
 
     // Initial Load
     fetchLibrary();

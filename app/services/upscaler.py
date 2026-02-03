@@ -67,20 +67,26 @@ def safe_read_wav_file(filename):
 import audiosr.lowpass
 from scipy.signal import ellip
 
-def safe_lowpass_filter(waveform=None, cutoff_freq=None, sample_rate=None, x=None, order=6, **kwargs):
-    # Handle 'x' being passed instead of 'waveform' (AudioSR sometimes uses 'x' kwarg)
-    if x is not None:
-        waveform = x
+# Correct signature from installed library: def lowpass_filter(x, highcut, fs, order, ftype):
+# We use kwargs to be safe against future changes or variations
+def safe_lowpass_filter(x, highcut=None, fs=None, order=6, ftype='ellip', **kwargs):
+    # Map arguments to local names
+    waveform = x
+    cutoff_freq = highcut
+    sample_rate = fs
+
+    # Handle kwargs fallbacks if positional args were None (unlikely given signature, but robust)
+    if cutoff_freq is None:
+        cutoff_freq = kwargs.get('cutoff_freq', kwargs.get('cutoff'))
+    if sample_rate is None:
+        sample_rate = kwargs.get('sample_rate', kwargs.get('sr'))
 
     if waveform is None:
-        raise ValueError("safe_lowpass_filter: waveform (or 'x') must be provided.")
-
-    if cutoff_freq is None or sample_rate is None:
-        # Try to retrieve from kwargs if audiosr passes them strangely
-        if cutoff_freq is None:
-             raise ValueError("safe_lowpass_filter: cutoff_freq must be provided.")
-        if sample_rate is None:
-             raise ValueError("safe_lowpass_filter: sample_rate must be provided.")
+        raise ValueError("safe_lowpass_filter: x (waveform) must be provided.")
+    if cutoff_freq is None:
+         raise ValueError("safe_lowpass_filter: highcut (cutoff_freq) must be provided.")
+    if sample_rate is None:
+         raise ValueError("safe_lowpass_filter: fs (sample_rate) must be provided.")
 
     # Clamp cutoff to be strictly less than Nyquist
     nyquist = sample_rate / 2
