@@ -50,10 +50,6 @@ class SeparatorService:
             else:
                 wav = torch.tensor(wav).t() # (samples, channels) -> (channels, samples)
 
-            # Normalize to match Demucs training (optional but good practice)
-            ref = wav.mean(0)
-            wav = (wav - ref.mean()) / (ref.std() + 1e-8)
-
             # Add batch dim: (1, 2, samples)
             wav = wav.unsqueeze(0).to(self.device)
 

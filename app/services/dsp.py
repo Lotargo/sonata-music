@@ -124,7 +124,7 @@ class StudioDSP:
             board.append(Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0))
 
         # 6. Limiter (Safety)
-        board.append(Limiter(threshold_db=-0.1))
+        board.append(Limiter(threshold_db=-1.0))
 
         return board
 
@@ -296,10 +296,10 @@ class StudioDSP:
                 mix += audio
 
             # Apply Headroom (Gain Staging) before Master Chain
-            # Reduce mix significantly to prevent limiter "choking" / flattening when summing 4 stems.
-            # -12dB (0.25) provides more safety against inter-sample peaks than -9dB.
+            # Reduce mix to prevent limiter "choking".
+            # -3dB (0.707) provides standard safety headroom now that inputs are natural volume.
             # (Dynamic Envelope Matching in upscaler will restore volume later, so we can be safe here)
-            mix = mix * 0.25
+            mix = mix * 0.707
 
             # Apply Master Glue (The "Balanced" chain we just fixed)
             # Use provided params or default to mastering
@@ -334,9 +334,9 @@ class StudioDSP:
             if audio.ndim == 1:
                 audio = audio[np.newaxis, :]
 
-            # Pre-gain: Reduce mix gain significantly (-6dB) before processing
-            # The input 'audio' here is a SUM of 4 stems, so it is likely clipped/hot > 0dB.
-            audio = audio * 0.5
+            # Pre-gain: Reduce mix gain slightly (-3dB) before processing
+            # With normalization removed, input is natural volume. -3dB allows headroom for EQ boosts.
+            audio = audio * 0.707
 
             # 1. Apply Stereo Widener First (NumPy)
             # Gentle widening to fix narrow AI stereo field
@@ -369,7 +369,7 @@ class StudioDSP:
             ))
 
             # --- Safety Limiter ---
-            board.append(Limiter(threshold_db=-0.1))
+            board.append(Limiter(threshold_db=-1.0))
 
             # 3. Process
             processed = board(audio, sample_rate)
