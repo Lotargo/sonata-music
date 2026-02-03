@@ -39,6 +39,14 @@ class StudioDSP:
                 "stereo_width": 1.0,
                 "target_lufs": -9.0
             },
+            "deep_bass": {
+                "reverb_enabled": False,
+                "bass_boost": 6.0,
+                "voice_clarity": 1.5,
+                "compressor_amount": 0.6,
+                "stereo_width": 1.0,
+                "target_lufs": -12.0
+            },
             "clear": {
                 "reverb_enabled": False,
                 "bass_boost": -2.0,
@@ -90,10 +98,15 @@ class StudioDSP:
         # 2. EQ: Bass Boost
         bass_db = params.get("bass_boost", 0.0)
         if bass_db != 0:
-            # "Soft Bass" Logic: If boosting, use lower freq (65Hz) for depth instead of punch (100Hz)
+            # "Soft Bass" Logic: If boosting, use lower freq (60Hz) for depth instead of punch (100Hz)
             # and add subtle saturation for warmth.
             if bass_db > 0:
-                board.append(LowShelfFilter(cutoff_frequency_hz=65, gain_db=bass_db))
+                board.append(LowShelfFilter(cutoff_frequency_hz=60, gain_db=bass_db))
+
+                # "Mud Cut": If boosting heavily (>3dB), cut 250Hz to prevent boxiness/mud
+                if bass_db > 3.0:
+                    board.append(PeakFilter(cutoff_frequency_hz=250, gain_db=-2.5, q=1.0))
+
                 # Add "Tube" warmth (saturation) to bass
                 board.append(Distortion(drive_db=0.3))
             else:
