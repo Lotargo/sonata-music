@@ -694,7 +694,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 metricsBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-red-400">Metrics not available.</td></tr>';
             }
         } catch (e) {
-            metricsBody.innerHTML = '<tr><td colspan="3" class="px-4 py-4 text-center text-red-400">Error loading metrics.</td></tr>';
+            console.error(e);
+            metricsBody.innerHTML = `<tr><td colspan="3" class="px-4 py-4 text-center text-red-400">Error loading metrics: ${e.message}</td></tr>`;
         }
     };
 
@@ -810,16 +811,16 @@ document.addEventListener('DOMContentLoaded', () => {
     function setCompareAudio(source) {
         activeCompareAudio = source;
         if(source === 'orig') {
-            wsOrig.setMute(false);
-            wsProc.setMute(true);
+            wsOrig.setMuted(false);
+            wsProc.setMuted(true);
             btnListenOrig.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
             btnListenOrig.classList.add('bg-blue-600', 'text-white', 'shadow-lg', 'shadow-blue-500/20');
 
             btnListenProc.classList.add('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
             btnListenProc.classList.remove('bg-indigo-600', 'hover:bg-indigo-700', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
         } else {
-            wsOrig.setMute(true);
-            wsProc.setMute(false);
+            wsOrig.setMuted(true);
+            wsProc.setMuted(false);
             btnListenProc.classList.remove('bg-slate-700', 'hover:bg-slate-600', 'border-white/5');
             btnListenProc.classList.add('bg-indigo-600', 'text-white', 'shadow-lg', 'shadow-indigo-500/20');
 
