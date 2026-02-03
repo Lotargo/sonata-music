@@ -188,7 +188,12 @@ def serve_uploaded_file(filename):
 
 @main.route('/library_files/<path:filename>') # Renamed to avoid confusion with /library route
 def serve_processed_file(filename):
-    return send_from_directory(current_app.config['PROCESSED_FOLDER'], filename)
+    response = send_from_directory(current_app.config['PROCESSED_FOLDER'], filename)
+    # Disable caching to prevent stale Range requests (416) if file is rewritten
+    response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
 
 @main.route('/favicon.ico')
 def favicon():
@@ -207,7 +212,10 @@ def get_track_metrics(track_id):
     # Resolve debug_output relative to project root
     # current_app.root_path is .../app
     project_root = os.path.dirname(current_app.root_path)
-    metrics_path = os.path.join(project_root, "debug_output", f"{base_name}_metrics.json")
+    metrics_dir = os.path.join(project_root, "debug_output")
+    metrics_path = os.path.join(metrics_dir, f"{base_name}_metrics.json")
+
+    print(f"DEBUG: Looking for metrics at {metrics_path}")
 
     if os.path.exists(metrics_path):
         try:
@@ -217,4 +225,10 @@ def get_track_metrics(track_id):
         except Exception as e:
             return jsonify({'error': f'Failed to read metrics: {str(e)}'}), 500
     else:
-        return jsonify({'error': 'Metrics file not found'}), 404
+        # Fallback: List directory to help debug
+        try:
+            files = os.listdir(metrics_dir) if os.path.exists(metrics_dir) else "Dir not found"
+            print(f"DEBUG: Files in debug_output: {files}")
+        except:
+            pass
+        return jsonify({'error': f'Metrics file not found at {metrics_path}'}), 404
