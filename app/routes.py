@@ -4,6 +4,7 @@ from app.services.upscaler import upscaler
 from app.services.metadata import extract_metadata
 from werkzeug.utils import secure_filename
 import os
+import json
 import threading
 
 main = Blueprint('main', __name__)
@@ -188,3 +189,28 @@ def serve_uploaded_file(filename):
 @main.route('/library_files/<path:filename>') # Renamed to avoid confusion with /library route
 def serve_processed_file(filename):
     return send_from_directory(current_app.config['PROCESSED_FOLDER'], filename)
+
+@main.route('/metrics/<int:track_id>', methods=['GET'])
+def get_track_metrics(track_id):
+    track = db.session.get(Track, track_id)
+    if not track or not track.processed_path:
+        return jsonify({'error': 'Track metrics not found'}), 404
+
+    # Construct expected metrics path: debug_output/{filename_no_ext}_metrics.json
+    # processed_path is full absolute path
+    base_name = os.path.basename(track.processed_path).rsplit('.', 1)[0]
+
+    # Resolve debug_output relative to project root
+    # current_app.root_path is .../app
+    project_root = os.path.dirname(current_app.root_path)
+    metrics_path = os.path.join(project_root, "debug_output", f"{base_name}_metrics.json")
+
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path, 'r') as f:
+                data = json.load(f)
+            return jsonify(data)
+        except Exception as e:
+            return jsonify({'error': f'Failed to read metrics: {str(e)}'}), 500
+    else:
+        return jsonify({'error': 'Metrics file not found'}), 404
