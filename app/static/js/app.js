@@ -873,9 +873,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Redraw wavesurfer to fit new container dimensions
+        // WaveSurfer v7 uses ResizeObserver automatically, but a manual trigger helps if transition affects layout
         setTimeout(() => {
-            if(wsOrig) wsOrig.drawBuffer();
-            if(wsProc) wsProc.drawBuffer();
+            // Trigger resize event to force redraw
+            window.dispatchEvent(new Event('resize'));
         }, 300);
     }
 

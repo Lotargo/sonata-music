@@ -190,6 +190,10 @@ def serve_uploaded_file(filename):
 def serve_processed_file(filename):
     return send_from_directory(current_app.config['PROCESSED_FOLDER'], filename)
 
+@main.route('/favicon.ico')
+def favicon():
+    return "", 204
+
 @main.route('/metrics/<int:track_id>', methods=['GET'])
 def get_track_metrics(track_id):
     track = db.session.get(Track, track_id)
