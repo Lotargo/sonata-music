@@ -175,6 +175,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Preset Logic
     const dspPresets = {
         "mastering": { stereo: 100, bass: 0, clarity: 0, comp: 50, rev: false },
+        "deep_bass": { stereo: 100, bass: 6, clarity: 1.5, comp: 60, rev: false },
         "clear": { stereo: 110, bass: -2, clarity: 5, comp: 40, rev: false },
         "warm": { stereo: 90, bass: 2, clarity: -1, comp: 60, rev: true, revSize: 30, revMix: 10 },
         "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false }
