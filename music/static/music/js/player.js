@@ -74,15 +74,17 @@ window.playTrack = async (id) => {
 
 function loadTrack(track) {
     // Determine URL: Processed > Original
-    // Note: Django API returns full URL usually, or path.
-    // In views.py library_api: processed_path is url, filename is filename.
-    // If processed_path is set, use it. Else uploads/filename
+    // track.processed_path is typically a full URL (e.g., /media/processed/file.flac)
+    // track.audio_url is the original file URL (e.g., /media/uploads/file.mp3)
 
     let url = '';
     if (track.status === 'completed' && track.processed_path) {
         url = track.processed_path;
+    } else if (track.audio_url) {
+        url = track.audio_url;
     } else {
-        url = `/uploads/${track.filename}`;
+        // Fallback if audio_url is missing for some reason
+        url = `/media/uploads/${track.filename}`;
     }
 
     audio.src = url;

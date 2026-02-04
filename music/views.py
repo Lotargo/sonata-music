@@ -63,6 +63,7 @@ def upload(request):
             'title': track.title,
             'artist': track.artist,
             'cover_url': track.cover_image.url if track.cover_image else None,
+            'audio_url': track.audio_file.url,
             'filename': os.path.basename(track.audio_file.name)
         }, status=201)
 
@@ -286,6 +287,7 @@ def library_api(request):
             'status': t.status,
             'cover_path': t.cover_image.url if t.cover_image else None,
             'processed_path': t.processed_file.url if t.processed_file else None,
+            'audio_url': t.audio_file.url if t.audio_file else None,
             'filename': os.path.basename(t.audio_file.name),
             'duration': t.duration,
             'is_liked': t.is_liked
