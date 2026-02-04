@@ -6,7 +6,12 @@ import subprocess
 import traceback
 import tempfile
 import gc
-from audiosr.pipeline import build_model, super_resolution, make_batch_for_super_resolution
+from audiosr.pipeline import (
+    build_model,
+    super_resolution,
+    make_batch_for_super_resolution,
+)
+
 # Explicitly import where we need to patch
 import audiosr.utils
 import audiosr.pipeline
@@ -14,13 +19,14 @@ import soundfile as sf
 import numpy as np
 from pydub import AudioSegment
 from tqdm import tqdm
-from app.services.dsp import dsp
-from app.services.separator import separator
-from app.services.metrics import metrics_service
+from music.services.dsp import dsp
+from music.services.separator import separator
+from music.services.metrics import metrics_service
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
 
 # Monkey-patch audiosr.utils.read_wav_file to be more robust
 def safe_read_wav_file(filename):
@@ -39,10 +45,12 @@ def safe_read_wav_file(filename):
 
     duration = waveform.size(-1) / sr
 
-    if(duration > 10.24):
-        logger.warning(f"Audio is {duration:.2f}s, which is longer than 10.24s. It will be truncated/chunked.")
+    if duration > 10.24:
+        logger.warning(
+            f"Audio is {duration:.2f}s, which is longer than 10.24s. It will be truncated/chunked."
+        )
 
-    if(duration % 5.12 != 0):
+    if duration % 5.12 != 0:
         pad_duration = duration + (5.12 - duration % 5.12)
     else:
         pad_duration = duration
@@ -62,14 +70,16 @@ def safe_read_wav_file(filename):
     waveform = audiosr.utils.pad_wav(waveform, target_length=int(48000 * pad_duration))
     return waveform, target_frame, pad_duration
 
+
 # Monkey-patch audiosr.lowpass.lowpass_filter to prevent Wn >= 1 crash
 # This occurs if AudioSR tries to lowpass a signal at/near Nyquist
 import audiosr.lowpass
 from scipy.signal import ellip
 
+
 # Correct signature from installed library: def lowpass_filter(x, highcut, fs, order, ftype):
 # We use kwargs to be safe against future changes or variations
-def safe_lowpass_filter(x, highcut=None, fs=None, order=6, ftype='ellip', **kwargs):
+def safe_lowpass_filter(x, highcut=None, fs=None, order=6, ftype="ellip", **kwargs):
     # Map arguments to local names
     waveform = x
     cutoff_freq = highcut
@@ -77,23 +87,25 @@ def safe_lowpass_filter(x, highcut=None, fs=None, order=6, ftype='ellip', **kwar
 
     # Handle kwargs fallbacks if positional args were None (unlikely given signature, but robust)
     if cutoff_freq is None:
-        cutoff_freq = kwargs.get('cutoff_freq', kwargs.get('cutoff'))
+        cutoff_freq = kwargs.get("cutoff_freq", kwargs.get("cutoff"))
     if sample_rate is None:
-        sample_rate = kwargs.get('sample_rate', kwargs.get('sr'))
+        sample_rate = kwargs.get("sample_rate", kwargs.get("sr"))
 
     if waveform is None:
         raise ValueError("safe_lowpass_filter: x (waveform) must be provided.")
     if cutoff_freq is None:
-         raise ValueError("safe_lowpass_filter: highcut (cutoff_freq) must be provided.")
+        raise ValueError("safe_lowpass_filter: highcut (cutoff_freq) must be provided.")
     if sample_rate is None:
-         raise ValueError("safe_lowpass_filter: fs (sample_rate) must be provided.")
+        raise ValueError("safe_lowpass_filter: fs (sample_rate) must be provided.")
 
     # Clamp cutoff to be strictly less than Nyquist
     nyquist = sample_rate / 2
     if cutoff_freq >= nyquist:
         # If cutoff is >= Nyquist, we clamp it to slightly below 1.0 (e.g. 0.99)
         # to prevent scipy.signal.ellip throwing ValueError: Digital filter critical frequencies must be 0 < Wn < 1
-        logger.warning(f"Clamping lowpass cutoff {cutoff_freq} to 0.99*Nyquist ({0.99*nyquist}) to avoid crash.")
+        logger.warning(
+            f"Clamping lowpass cutoff {cutoff_freq} to 0.99*Nyquist ({0.99*nyquist}) to avoid crash."
+        )
         cutoff_freq = 0.99 * nyquist
 
     # Original logic (copied/adapted from audiosr)
@@ -124,6 +136,7 @@ def safe_lowpass_filter(x, highcut=None, fs=None, order=6, ftype='ellip', **kwar
         return torch.from_numpy(filtered.copy()).to(device=device, dtype=dtype)
     return filtered
 
+
 # Apply monkey patch to audiosr.lowpass
 logger.info("Applying monkey-patch to audiosr.lowpass.lowpass_filter")
 audiosr.lowpass.lowpass_filter = safe_lowpass_filter
@@ -132,16 +145,23 @@ audiosr.lowpass.lowpass_filter = safe_lowpass_filter
 logger.info("Applying monkey-patch to audiosr.utils.read_wav_file")
 audiosr.utils.read_wav_file = safe_read_wav_file
 
+
 class UpscalerService:
     def __init__(self):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.model = None
         self.ffmpeg_available = self._check_ffmpeg()
-        logger.info(f"UpscalerService initialized on {self.device}. FFmpeg available: {self.ffmpeg_available}")
+        logger.info(
+            f"UpscalerService initialized on {self.device}. FFmpeg available: {self.ffmpeg_available}"
+        )
 
     def _check_ffmpeg(self):
         try:
-            subprocess.run(["ffmpeg", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(
+                ["ffmpeg", "-version"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
             return True
         except Exception:
             return False
@@ -159,42 +179,39 @@ class UpscalerService:
 
     def _convert_format(self, input_wav, output_path, target_format, bitrate_str):
         """Helper to convert WAV to other formats using pydub."""
-        logger.info(f"Converting to {target_format} (bitrate/depth: {bitrate_str}) using pydub")
+        logger.info(
+            f"Converting to {target_format} (bitrate/depth: {bitrate_str}) using pydub"
+        )
         audio = AudioSegment.from_wav(input_wav)
 
-        format_map = {
-            'mp3': 'mp3',
-            'flac': 'flac',
-            'ogg': 'ogg',
-            'vorbis': 'ogg'
-        }
+        format_map = {"mp3": "mp3", "flac": "flac", "ogg": "ogg", "vorbis": "ogg"}
         out_fmt = format_map.get(target_format.lower(), target_format.lower())
 
         # Handle Bitrate clamping for lossy formats
-        if out_fmt in ['mp3', 'ogg']:
+        if out_fmt in ["mp3", "ogg"]:
             # Parse numerical bitrate
             try:
                 # Remove 'k' and convert to int
-                kbps = int(''.join(filter(str.isdigit, bitrate_str)))
+                kbps = int("".join(filter(str.isdigit, bitrate_str)))
             except ValueError:
-                kbps = 320 # Default fallback
+                kbps = 320  # Default fallback
 
             # Clamp limits
-            if out_fmt == 'mp3':
+            if out_fmt == "mp3":
                 kbps = min(kbps, 320)
-            elif out_fmt == 'ogg':
+            elif out_fmt == "ogg":
                 kbps = min(kbps, 500)
 
             final_bitrate = f"{kbps}k"
             logger.info(f"Exporting {out_fmt} with bitrate {final_bitrate}")
             audio.export(output_path, format=out_fmt, bitrate=final_bitrate)
 
-        elif out_fmt == 'flac':
-             # FLAC is lossless, bitrate arg doesn't apply to compression level directly in pydub/ffmpeg simple interface
-             # We just export as FLAC. Pydub doesn't expose sample_fmt easily for export,
-             # but input was saved as 24-bit WAV if possible, so FLAC should retain high quality.
-             logger.info(f"Exporting {out_fmt} (lossless)")
-             audio.export(output_path, format=out_fmt)
+        elif out_fmt == "flac":
+            # FLAC is lossless, bitrate arg doesn't apply to compression level directly in pydub/ffmpeg simple interface
+            # We just export as FLAC. Pydub doesn't expose sample_fmt easily for export,
+            # but input was saved as 24-bit WAV if possible, so FLAC should retain high quality.
+            logger.info(f"Exporting {out_fmt} (lossless)")
+            audio.export(output_path, format=out_fmt)
 
         else:
             # Fallback
@@ -235,9 +252,15 @@ class UpscalerService:
 
         # Helper to compute envelope
         def compute_envelope(waveform, win_size, padding):
-            squared = waveform ** 2
+            squared = waveform**2
             squared = squared.unsqueeze(0)
-            envelope = torch.nn.functional.avg_pool1d(squared, kernel_size=win_size, stride=1, padding=padding, count_include_pad=False)
+            envelope = torch.nn.functional.avg_pool1d(
+                squared,
+                kernel_size=win_size,
+                stride=1,
+                padding=padding,
+                count_include_pad=False,
+            )
             envelope = torch.sqrt(envelope + 1e-8)
             return envelope.squeeze(0)
 
@@ -265,7 +288,9 @@ class UpscalerService:
         # Apply gentle clamping to gain to prevent massive jumps if target is silent
         gain = torch.clamp(gain, 0.1, 10.0)
 
-        logger.info(f"RMS Match: Source={rms_source:.4f}, Target={rms_target:.4f}, Gain={gain:.4f}")
+        logger.info(
+            f"RMS Match: Source={rms_source:.4f}, Target={rms_target:.4f}, Gain={gain:.4f}"
+        )
         return target * gain
 
     def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
@@ -283,10 +308,10 @@ class UpscalerService:
             "log_mel_spec": [],
             "lowpass_mel": [],
             "waveform_lowpass": [],
-            "sampling_rate": 48000
+            "sampling_rate": 48000,
         }
 
-        max_duration = 5.12 # Standard for AudioSR
+        max_duration = 5.12  # Standard for AudioSR
 
         for f in input_files:
             # make_batch_for_super_resolution returns (batch_dict, duration)
@@ -295,7 +320,7 @@ class UpscalerService:
 
             for k in batched_inputs.keys():
                 if k != "sampling_rate" and k in mini_batch:
-                     batched_inputs[k].append(mini_batch[k])
+                    batched_inputs[k].append(mini_batch[k])
 
         # Concatenate
         final_batch = {}
@@ -303,13 +328,13 @@ class UpscalerService:
             if k == "sampling_rate":
                 final_batch[k] = batched_inputs[k]
             elif len(batched_inputs[k]) > 0:
-                final_batch[k] = torch.cat(batched_inputs[k], dim=0) # [B, ...]
+                final_batch[k] = torch.cat(batched_inputs[k], dim=0)  # [B, ...]
                 # Move to device
                 final_batch[k] = final_batch[k].to(self.device)
 
         # 2. Run Inference
         if self.device == "cuda":
-             with torch.amp.autocast(device_type='cuda', dtype=torch.float16):
+            with torch.amp.autocast(device_type="cuda", dtype=torch.float16):
                 with torch.no_grad():
                     waveforms = self.model.generate_batch(
                         final_batch,
@@ -318,7 +343,7 @@ class UpscalerService:
                         duration=max_duration,
                     )
         else:
-             with torch.no_grad():
+            with torch.no_grad():
                 waveforms = self.model.generate_batch(
                     final_batch,
                     unconditional_guidance_scale=guidance_scale,
@@ -326,9 +351,11 @@ class UpscalerService:
                     duration=max_duration,
                 )
 
-        return waveforms # [B, 1, samples]
+        return waveforms  # [B, 1, samples]
 
-    def _process_channel_waveform(self, waveform, sr, ddim_steps, guidance_scale, seed, batch_size=4):
+    def _process_channel_waveform(
+        self, waveform, sr, ddim_steps, guidance_scale, seed, batch_size=4
+    ):
         """
         Processes a single-channel waveform using Overlap-Add (OLA) and Batching.
         """
@@ -353,7 +380,9 @@ class UpscalerService:
         else:
             num_segments = int(np.ceil((total_samples - segment_length) / stride)) + 1
 
-        logger.info(f"Processing {num_segments} segments (OLA) with batch size {batch_size}...")
+        logger.info(
+            f"Processing {num_segments} segments (OLA) with batch size {batch_size}..."
+        )
 
         # Prepare output buffer and weight buffer
         output_waveform = torch.zeros_like(waveform)
@@ -362,7 +391,7 @@ class UpscalerService:
         # Create Hanning window
         window = torch.hann_window(segment_length).to(waveform.device)
 
-        segments_info = [] # List of (start, end, temp_file_path)
+        segments_info = []  # List of (start, end, temp_file_path)
 
         try:
             # 1. Slice and Save all segments
@@ -377,20 +406,30 @@ class UpscalerService:
                     segment = torch.nn.functional.pad(segment, (0, pad_amt))
 
                 # Save to temp
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_seg:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".wav", delete=False
+                ) as tmp_seg:
                     temp_seg_path = tmp_seg.name
 
                 # Write
                 sf.write(temp_seg_path, segment.T.numpy(), sr)
-                segments_info.append({"start": start, "end": end, "path": temp_seg_path})
+                segments_info.append(
+                    {"start": start, "end": end, "path": temp_seg_path}
+                )
 
             # 2. Process in Batches
-            for i in tqdm(range(0, len(segments_info), batch_size), desc="Upscaling Batches", unit="batch"):
+            for i in tqdm(
+                range(0, len(segments_info), batch_size),
+                desc="Upscaling Batches",
+                unit="batch",
+            ):
                 batch_files = [s["path"] for s in segments_info[i : i + batch_size]]
 
                 try:
                     # Run batch inference
-                    out_batch = self._batched_super_resolution(batch_files, ddim_steps, guidance_scale, seed)
+                    out_batch = self._batched_super_resolution(
+                        batch_files, ddim_steps, guidance_scale, seed
+                    )
 
                     # 3. Overlap-Add
                     for j, out_tensor in enumerate(out_batch):
@@ -416,17 +455,25 @@ class UpscalerService:
 
                         # If output length differs from window length (e.g. slight rounding in model), trim/pad
                         if out_tensor.shape[-1] > segment_length:
-                             out_tensor = out_tensor[:segment_length]
+                            out_tensor = out_tensor[:segment_length]
                         elif out_tensor.shape[-1] < segment_length:
-                             out_tensor = torch.nn.functional.pad(out_tensor, (0, segment_length - out_tensor.shape[-1]))
+                            out_tensor = torch.nn.functional.pad(
+                                out_tensor, (0, segment_length - out_tensor.shape[-1])
+                            )
 
                         weighted_seg = out_tensor * window.cpu()
 
                         # Add to buffer
-                        valid_len = min(segment_length, output_waveform.shape[-1] - start)
+                        valid_len = min(
+                            segment_length, output_waveform.shape[-1] - start
+                        )
 
-                        output_waveform[:, start : start + valid_len] += weighted_seg[:valid_len]
-                        output_weights[:, start : start + valid_len] += window.cpu()[:valid_len]
+                        output_waveform[:, start : start + valid_len] += weighted_seg[
+                            :valid_len
+                        ]
+                        output_weights[:, start : start + valid_len] += window.cpu()[
+                            :valid_len
+                        ]
 
                 except Exception as e:
                     logger.error(f"Batch processing failed: {e}")
@@ -439,12 +486,12 @@ class UpscalerService:
             return output_waveform
 
         finally:
-             for info in segments_info:
-                 if os.path.exists(info["path"]):
-                     try:
-                         os.remove(info["path"])
-                     except:
-                         pass
+            for info in segments_info:
+                if os.path.exists(info["path"]):
+                    try:
+                        os.remove(info["path"])
+                    except:
+                        pass
 
     def _generate_metrics_report(self, input_path, output_path):
         """Helper to generate metrics report, reusable across modes."""
@@ -457,13 +504,15 @@ class UpscalerService:
             # upscaler.py is in app/services/ -> dirname is app/services
             # .. -> app
             # .. -> project_root
-            project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+            project_root = os.path.abspath(
+                os.path.join(os.path.dirname(__file__), "..", "..")
+            )
             debug_dir = os.path.join(project_root, "debug_output")
 
             logger.info(f"Debug directory: {debug_dir}")
             os.makedirs(debug_dir, exist_ok=True)
 
-            base_name = os.path.basename(output_path).rsplit('.', 1)[0]
+            base_name = os.path.basename(output_path).rsplit(".", 1)[0]
             debug_path_base = os.path.join(debug_dir, base_name)
 
             # Ensure paths are absolute for metrics service
@@ -478,9 +527,21 @@ class UpscalerService:
             logger.error(f"Failed to generate metrics/plot: {e}")
             traceback.print_exc()
 
-    def process_track(self, input_path, output_path, mode="ai", ddim_steps=50, guidance_scale=3.5, seed=42,
-                      target_format="wav", target_sample_rate=48000, target_bitrate="320k", batch_size=2,
-                      dsp_preset="mastering", dsp_params=None):
+    def process_track(
+        self,
+        input_path,
+        output_path,
+        mode="ai",
+        ddim_steps=50,
+        guidance_scale=3.5,
+        seed=42,
+        target_format="wav",
+        target_sample_rate=48000,
+        target_bitrate="320k",
+        batch_size=2,
+        dsp_preset="mastering",
+        dsp_params=None,
+    ):
         """
         Upscale/Process the audio file at input_path and save to output_path.
         Modes: 'ai' (AudioSR), 'dsp' (Studio DSP), or 'hybrid' (Stem Separation + DSP).
@@ -500,14 +561,24 @@ class UpscalerService:
 
                 # Run DSP
                 # dsp.process handles resampling and effect chain
-                dsp.process(input_path, temp_wav, preset_name=dsp_preset, params=dsp_params, sample_rate=target_sample_rate)
+                dsp.process(
+                    input_path,
+                    temp_wav,
+                    preset_name=dsp_preset,
+                    params=dsp_params,
+                    sample_rate=target_sample_rate,
+                )
 
                 # Convert to target format if needed
                 if target_format.lower() != "wav":
                     if not self.ffmpeg_available:
-                        logger.error("FFmpeg not found! Cannot convert to lossy formats.")
+                        logger.error(
+                            "FFmpeg not found! Cannot convert to lossy formats."
+                        )
                     else:
-                        self._convert_format(temp_wav, output_path, target_format, target_bitrate)
+                        self._convert_format(
+                            temp_wav, output_path, target_format, target_bitrate
+                        )
                         # Cleanup temp
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
@@ -533,7 +604,12 @@ class UpscalerService:
                     # 3. Process Stems & Mix
                     logger.info("Processing and mixing stems...")
                     # returns (channels, samples) numpy array
-                    hybrid_audio = dsp.process_stems(stems_map, temp_wav, params=dsp_params, sample_rate=target_sample_rate)
+                    hybrid_audio = dsp.process_stems(
+                        stems_map,
+                        temp_wav,
+                        params=dsp_params,
+                        sample_rate=target_sample_rate,
+                    )
 
                 # 4. Envelope Matching (Dynamics Restoration)
                 # Load original to get reference
@@ -541,7 +617,7 @@ class UpscalerService:
                 if data.ndim == 1:
                     data = data[None, :]
                 else:
-                    data = data.T # (C, S)
+                    data = data.T  # (C, S)
 
                 # Convert to Torch
                 original_tensor = torch.from_numpy(data).float()
@@ -549,17 +625,26 @@ class UpscalerService:
 
                 # Use Dynamic Envelope Matching for Hybrid Mode
                 # This restores the original volume contour/dynamics, fixing "brickwall" issues
-                matched_waveform = self._match_envelope(original_tensor, hybrid_tensor, target_sample_rate, window_ms=100)
+                matched_waveform = self._match_envelope(
+                    original_tensor, hybrid_tensor, target_sample_rate, window_ms=100
+                )
                 # matched_waveform = hybrid_tensor # DISABLED FOR TESTING
 
                 # 5. Save Final Output
                 # Determine subtype
-                subtype = 'PCM_24'
-                if target_bitrate == '16-bit': subtype = 'PCM_16'
-                elif target_bitrate == '32-bit': subtype = 'FLOAT'
+                subtype = "PCM_24"
+                if target_bitrate == "16-bit":
+                    subtype = "PCM_16"
+                elif target_bitrate == "32-bit":
+                    subtype = "FLOAT"
 
                 try:
-                    sf.write(temp_wav, matched_waveform.numpy().T, target_sample_rate, subtype=subtype)
+                    sf.write(
+                        temp_wav,
+                        matched_waveform.numpy().T,
+                        target_sample_rate,
+                        subtype=subtype,
+                    )
                 except Exception as e:
                     logger.error(f"Failed to save hybrid output: {e}")
                     sf.write(temp_wav, matched_waveform.numpy().T, target_sample_rate)
@@ -567,9 +652,13 @@ class UpscalerService:
                 # 6. Convert format if needed
                 if target_format.lower() != "wav":
                     if not self.ffmpeg_available:
-                        logger.error("FFmpeg not found! Cannot convert to lossy formats.")
+                        logger.error(
+                            "FFmpeg not found! Cannot convert to lossy formats."
+                        )
                     else:
-                        self._convert_format(temp_wav, output_path, target_format, target_bitrate)
+                        self._convert_format(
+                            temp_wav, output_path, target_format, target_bitrate
+                        )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
@@ -589,7 +678,9 @@ class UpscalerService:
                 # 1. Demucs Separation (Re-synthesis)
                 # We separate and recombine to "filter" MP3 artifacts
                 with tempfile.TemporaryDirectory() as stem_dir:
-                    logger.info(f"Step 1: Separating stems for re-synthesis into {stem_dir}...")
+                    logger.info(
+                        f"Step 1: Separating stems for re-synthesis into {stem_dir}..."
+                    )
                     stems_map = separator.separate_track(input_path, stem_dir)
 
                     # 2. Re-mix (Summation)
@@ -597,29 +688,34 @@ class UpscalerService:
 
                     loaded_stems = []
                     max_len = 0
-                    current_sr = target_sample_rate # Will update from first stem
+                    current_sr = target_sample_rate  # Will update from first stem
 
                     for s_path in stems_map.values():
                         # Read as float32 to match final_mix dtype and save memory
-                        s_data, s_sr = sf.read(s_path, dtype='float32')
+                        s_data, s_sr = sf.read(s_path, dtype="float32")
                         current_sr = s_sr
 
                         if s_data.ndim == 1:
                             s_data = s_data[None, :]
                         else:
-                            s_data = s_data.T # (Channels, Samples)
+                            s_data = s_data.T  # (Channels, Samples)
 
                         loaded_stems.append(s_data)
                         if s_data.shape[1] > max_len:
                             max_len = s_data.shape[1]
 
                     # Initialize mix
-                    final_mix = np.zeros((loaded_stems[0].shape[0], max_len), dtype=np.float32)
+                    final_mix = np.zeros(
+                        (loaded_stems[0].shape[0], max_len), dtype=np.float32
+                    )
 
                     for s_data in loaded_stems:
                         # Pad if needed
                         if s_data.shape[1] < max_len:
-                            pad = np.zeros((s_data.shape[0], max_len - s_data.shape[1]), dtype=np.float32)
+                            pad = np.zeros(
+                                (s_data.shape[0], max_len - s_data.shape[1]),
+                                dtype=np.float32,
+                            )
                             s_data = np.concatenate([s_data, pad], axis=1)
                         final_mix += s_data
 
@@ -631,7 +727,10 @@ class UpscalerService:
                 # Resample if target_sample_rate differs
                 if current_sr != target_sample_rate:
                     import resampy
-                    polished = resampy.resample(polished, current_sr, target_sample_rate, axis=1)
+
+                    polished = resampy.resample(
+                        polished, current_sr, target_sample_rate, axis=1
+                    )
 
                 # Write
                 sf.write(temp_wav, polished.T, target_sample_rate)
@@ -639,7 +738,9 @@ class UpscalerService:
                 # Convert
                 if target_format.lower() != "wav":
                     if self.ffmpeg_available:
-                        self._convert_format(temp_wav, output_path, target_format, target_bitrate)
+                        self._convert_format(
+                            temp_wav, output_path, target_format, target_bitrate
+                        )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
@@ -654,13 +755,19 @@ class UpscalerService:
             try:
                 logger.info("Step 1: Running DSP Pre-processing for AI...")
                 if target_format.lower() == "wav":
-                     dsp_temp_wav = output_path + ".dsp_pre.wav"
+                    dsp_temp_wav = output_path + ".dsp_pre.wav"
                 else:
-                     dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
+                    dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
 
                 # Apply DSP (EQ, Comp, Limiter) to input
                 # We force 48kHz here to match AudioSR expectation, saving a resample step later
-                dsp.process(input_path, dsp_temp_wav, preset_name=dsp_preset, params=dsp_params, sample_rate=48000)
+                dsp.process(
+                    input_path,
+                    dsp_temp_wav,
+                    preset_name=dsp_preset,
+                    params=dsp_params,
+                    sample_rate=48000,
+                )
 
                 # Update input_path to use the cleaned file for the rest of the pipeline
                 input_path = dsp_temp_wav
@@ -674,7 +781,9 @@ class UpscalerService:
 
             self.load_model()
 
-            logger.info(f"AI Params: steps={ddim_steps}, guidance={guidance_scale}, seed={seed}, batch={batch_size}")
+            logger.info(
+                f"AI Params: steps={ddim_steps}, guidance={guidance_scale}, seed={seed}, batch={batch_size}"
+            )
 
             # Read file using soundfile (Reload in case input_path changed due to DSP)
             try:
@@ -682,7 +791,7 @@ class UpscalerService:
                 if data.ndim == 1:
                     data = data[None, :]
                 else:
-                    data = data.T # Convert to [channels, samples]
+                    data = data.T  # Convert to [channels, samples]
                 waveform = torch.from_numpy(data).float()
             except Exception as e:
                 logger.error(f"Failed to read input file with sf.read: {e}")
@@ -705,7 +814,9 @@ class UpscalerService:
 
             if channels == 1:
                 # Process Mono
-                upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
+                upscaled_waveform = self._process_channel_waveform(
+                    waveform, sr, ddim_steps, guidance_scale, seed, batch_size
+                )
             elif channels == 2:
                 # Process Stereo using Mid-Side to preserve Phase/Width
                 logger.info("Stereo detected. Using Mid-Side processing...")
@@ -719,11 +830,15 @@ class UpscalerService:
                 # We trust AI to improve the "core" (Mid) information, but we keep Side original to prevent
                 # phase issues and "channel leakage" where AI hallucinates stereo width differently on L/R.
                 logger.info("Upscaling Mid Channel...")
-                mid_upscaled = self._process_channel_waveform(mid_channel, sr, ddim_steps, guidance_scale, seed, batch_size)
+                mid_upscaled = self._process_channel_waveform(
+                    mid_channel, sr, ddim_steps, guidance_scale, seed, batch_size
+                )
 
                 # 3. Match Dynamics on Mid Channel (Essential)
                 # Restore the dynamics of the original Mid to the new High-Res Mid
-                mid_upscaled = self._match_envelope(mid_channel, mid_upscaled, sr, window_ms=100)
+                mid_upscaled = self._match_envelope(
+                    mid_channel, mid_upscaled, sr, window_ms=100
+                )
 
                 # 4. Handle Side Channel (Pass-through / Resample)
                 # We need side_channel to match the length and sample rate of mid_upscaled.
@@ -749,16 +864,24 @@ class UpscalerService:
 
                 upscaled_waveform = torch.cat([out_left, out_right], dim=0)
             else:
-                 # For > 2 channels, just mix to mono for now
-                 logger.warning(f"Unsupported channel count {channels}. Downmixing to mono.")
-                 waveform = torch.mean(waveform, dim=0, keepdim=True)
-                 upscaled_waveform = self._process_channel_waveform(waveform, sr, ddim_steps, guidance_scale, seed, batch_size)
+                # For > 2 channels, just mix to mono for now
+                logger.warning(
+                    f"Unsupported channel count {channels}. Downmixing to mono."
+                )
+                waveform = torch.mean(waveform, dim=0, keepdim=True)
+                upscaled_waveform = self._process_channel_waveform(
+                    waveform, sr, ddim_steps, guidance_scale, seed, batch_size
+                )
 
             # --- Global Envelope Matching (Parent-Child) ---
             if upscaled_waveform is not None:
-                upscaled_waveform = self._match_envelope(waveform, upscaled_waveform, sr, window_ms=100)
+                upscaled_waveform = self._match_envelope(
+                    waveform, upscaled_waveform, sr, window_ms=100
+                )
 
-            logger.info(f"Generated waveform shape: {upscaled_waveform.shape}, dtype: {upscaled_waveform.dtype}, device: {upscaled_waveform.device}")
+            logger.info(
+                f"Generated waveform shape: {upscaled_waveform.shape}, dtype: {upscaled_waveform.dtype}, device: {upscaled_waveform.device}"
+            )
 
             # Ensure directory exists
             output_dir = os.path.dirname(output_path)
@@ -774,22 +897,29 @@ class UpscalerService:
             # Resample if needed
             if target_sample_rate != 48000:
                 logger.info(f"Resampling from 48000 to {target_sample_rate}")
-                resampler = torchaudio.transforms.Resample(orig_freq=48000, new_freq=target_sample_rate)
+                resampler = torchaudio.transforms.Resample(
+                    orig_freq=48000, new_freq=target_sample_rate
+                )
                 upscaled_waveform = resampler(upscaled_waveform)
                 logger.info(f"Resampled waveform shape: {upscaled_waveform.shape}")
 
             # Determine subtype based on request (target_bitrate holds '16-bit', '24-bit', etc for WAV/FLAC)
-            subtype = 'PCM_24' # Default high quality
-            if target_bitrate == '16-bit':
-                subtype = 'PCM_16'
-            elif target_bitrate == '32-bit':
-                subtype = 'FLOAT'
+            subtype = "PCM_24"  # Default high quality
+            if target_bitrate == "16-bit":
+                subtype = "PCM_16"
+            elif target_bitrate == "32-bit":
+                subtype = "FLOAT"
 
             # Save as WAV first
             if target_format.lower() in ["wav", "flac"]:
                 logger.info(f"Attempting to save intermediate WAV as {subtype}")
                 try:
-                    sf.write(temp_wav, upscaled_waveform.T.numpy(), target_sample_rate, subtype=subtype)
+                    sf.write(
+                        temp_wav,
+                        upscaled_waveform.T.numpy(),
+                        target_sample_rate,
+                        subtype=subtype,
+                    )
                 except Exception as e:
                     logger.error(f"Failed to save with subtype {subtype}: {e}")
                     # Fallback
@@ -803,16 +933,26 @@ class UpscalerService:
 
             if target_format.lower() != "wav":
                 if not self.ffmpeg_available:
-                    logger.error("FFmpeg not found! Cannot convert to lossy formats or FLAC.")
+                    logger.error(
+                        "FFmpeg not found! Cannot convert to lossy formats or FLAC."
+                    )
                 else:
-                    self._convert_format(temp_wav, output_path, target_format, target_bitrate)
-                    if temp_wav and os.path.exists(temp_wav) and temp_wav != output_path:
+                    self._convert_format(
+                        temp_wav, output_path, target_format, target_bitrate
+                    )
+                    if (
+                        temp_wav
+                        and os.path.exists(temp_wav)
+                        and temp_wav != output_path
+                    ):
                         os.remove(temp_wav)
 
             # --- Generate Diagnostics/Metrics ---
             self._generate_metrics_report(input_path, output_path)
 
-            logger.info(f"Successfully saved upscaled audio to {output_path}. Final file size: {os.path.getsize(output_path) / (1024*1024):.2f} MB")
+            logger.info(
+                f"Successfully saved upscaled audio to {output_path}. Final file size: {os.path.getsize(output_path) / (1024*1024):.2f} MB"
+            )
             return True
 
         except Exception as e:
@@ -827,11 +967,16 @@ class UpscalerService:
         finally:
             self.unload_model()
             # Cleanup DSP temp file
-            if 'dsp_temp_wav' in locals() and dsp_temp_wav and os.path.exists(dsp_temp_wav):
+            if (
+                "dsp_temp_wav" in locals()
+                and dsp_temp_wav
+                and os.path.exists(dsp_temp_wav)
+            ):
                 try:
                     os.remove(dsp_temp_wav)
                 except:
                     pass
+
 
 # Create a singleton instance
 upscaler = UpscalerService()

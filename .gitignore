@@ -4,9 +4,12 @@ __pycache__/
 *.pyd
 .venv/
 *.db
+*.sqlite3
 *.log
 uploads/*
 !uploads/.gitkeep
 library/*
 !library/.gitkeep
+media/
+verification_*.png
 .DS_Store

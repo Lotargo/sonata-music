@@ -5,9 +5,10 @@ import tempfile
 import sys
 
 # Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app.services.dsp import dsp
+
 
 def verify_resampling():
     print("Verifying Resampling Integrity (44.1k -> 48k)...")
@@ -19,10 +20,10 @@ def verify_resampling():
     sr_orig = 44100
     t = np.linspace(0, duration_sec, int(sr_orig * duration_sec))
     audio = 0.5 * np.sin(2 * np.pi * 440 * t)
-    audio = np.stack([audio, audio], axis=1) # Stereo (Samples, Channels)
+    audio = np.stack([audio, audio], axis=1)  # Stereo (Samples, Channels)
 
     # Save dummy stems
-    names = ['vocals', 'drums', 'bass', 'other']
+    names = ["vocals", "drums", "bass", "other"]
     stems_map = {}
 
     for name in names:
@@ -36,7 +37,9 @@ def verify_resampling():
 
     try:
         # returns (Channels, Samples)
-        result_array = dsp.process_stems(stems_map, dummy_out, params=None, sample_rate=sr_target)
+        result_array = dsp.process_stems(
+            stems_map, dummy_out, params=None, sample_rate=sr_target
+        )
 
         # Check shape
         # Expected samples = 5.0 * 48000 = 240000
@@ -50,7 +53,7 @@ def verify_resampling():
 
         # Tolerance check (resampling might add tiny padding)
         diff = abs(actual_samples - expected_samples)
-        if diff < 100: # < 2ms error
+        if diff < 100:  # < 2ms error
             print("SUCCESS: Duration preserved correctly.")
         else:
             actual_duration = actual_samples / sr_target
@@ -60,7 +63,9 @@ def verify_resampling():
         print(f"FAILURE: Processing crashed: {e}")
     finally:
         import shutil
+
         shutil.rmtree(temp_dir)
+
 
 if __name__ == "__main__":
     verify_resampling()
