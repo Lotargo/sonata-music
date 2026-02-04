@@ -34,7 +34,7 @@ window.openDetails = async (id) => {
     if (!track) {
         // Fallback: fetch library
         try {
-            const res = await fetch('/library');
+            const res = await fetch('/library/');
             const tracks = await res.json();
             track = tracks.find(t => t.id === id);
         } catch(e) {
@@ -61,7 +61,7 @@ window.openDetails = async (id) => {
 
     // Fetch Metrics
     try {
-        const res = await fetch(`/metrics/${id}`);
+        const res = await fetch(`/metrics/${id}/`);
         if (res.ok) {
             const data = await res.json();
             renderMetricsTable(data);
