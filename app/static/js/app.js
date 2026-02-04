@@ -767,7 +767,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // Load Audio
         // Original needs URL: /uploads/filename
         const origUrl = `/uploads/${track.filename}`;
-        const procUrl = `/library_files/${track.processed_path}`; // processed_path in JSON is basename
+        // processed_path is absolute in DB, we need just filename for the route
+        const procFilename = track.processed_path.split('/').pop();
+        const procUrl = `/library_files/${procFilename}`;
 
         wsOrig.load(origUrl);
         wsProc.load(procUrl);
