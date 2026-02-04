@@ -12,10 +12,17 @@ def main():
             "forget to activate a virtual environment?"
         ) from exc
 
-    # default to runserver if no args
+    # Auto-migrate if this is the main entry point and no args provided
     if len(sys.argv) == 1:
+        print("Running database migrations...")
+        execute_from_command_line(['manage.py', 'migrate'])
+
+        print("\nStarting development server...")
+        print("Open http://127.0.0.1:8001/ in your browser.\n")
+
+        # Change default port to 8001 to avoid conflicts
         sys.argv.append('runserver')
-        sys.argv.append('0.0.0.0:8000')
+        sys.argv.append('127.0.0.1:8001')
 
     execute_from_command_line(sys.argv)
 
