@@ -37,7 +37,7 @@ async function initPlayer() {
 
 async function fetchLibrary() {
     try {
-        const response = await fetch('/library');
+        const response = await fetch('/library/');
         if (response.ok) {
             window.tracks = await response.json();
             // Trigger event for other components if needed

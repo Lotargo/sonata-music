@@ -3,6 +3,7 @@ import logging
 import soundfile as sf
 import numpy as np
 import resampy
+from pydub import AudioSegment
 from pedalboard import (
     Pedalboard,
     Compressor,
@@ -89,6 +90,71 @@ class StudioDSP:
         right = mid - side
 
         return np.stack([left, right])
+
+    def _read_audio_file(self, filepath):
+        """
+        Robustly reads an audio file.
+        Prioritizes soundfile for speed and float32 quality.
+        Falls back to pydub (FFmpeg) if soundfile fails or returns silence.
+        Returns: (audio_data_np, sample_rate)
+        Audio data is (channels, samples) float32 [-1, 1]
+        """
+        try:
+            # 1. Try soundfile
+            try:
+                data, sr = sf.read(filepath)
+                # Check for silence (absolute zero) which might indicate decode failure
+                if np.max(np.abs(data)) == 0:
+                    logger.warning(
+                        f"Soundfile read silence for {filepath}. Trying pydub..."
+                    )
+                    raise ValueError("Silent file")
+
+                # Shape handling: (samples, channels) -> (channels, samples)
+                if data.ndim == 1:
+                    data = data[np.newaxis, :]
+                else:
+                    data = data.T
+
+                return data.astype(np.float32), sr
+            except Exception as e:
+                logger.warning(
+                    f"Soundfile failed ({e}), falling back to pydub for {filepath}"
+                )
+
+                # 2. Fallback to pydub
+                audio = AudioSegment.from_file(filepath)
+                sr = audio.frame_rate
+
+                # Convert to numpy float32
+                # get_array_of_samples returns standard array.array of integers
+                raw_data = np.array(audio.get_array_of_samples())
+
+                if audio.channels == 2:
+                    raw_data = raw_data.reshape((-1, 2)).T
+                else:
+                    raw_data = raw_data[np.newaxis, :]
+
+                # Normalize based on sample width
+                if audio.sample_width == 2:  # 16-bit
+                    raw_data = raw_data.astype(np.float32) / 32768.0
+                elif audio.sample_width == 4:  # 32-bit
+                    raw_data = raw_data.astype(np.float32) / 2147483648.0
+                elif audio.sample_width == 1:  # 8-bit unsigned
+                    raw_data = (raw_data.astype(np.float32) - 128) / 128.0
+                else:
+                    # 24-bit (3 bytes) usually handled by pydub as 32-bit int with padding or just bytes
+                    # pydub support for 24-bit is sometimes tricky, but usually works via ffmpeg
+                    # Fallback generic normalization
+                    max_val = np.max(np.abs(raw_data))
+                    if max_val > 0:
+                        raw_data = raw_data.astype(np.float32) / max_val
+
+                return raw_data, sr
+
+        except Exception as e:
+            logger.error(f"All audio read attempts failed for {filepath}: {e}")
+            raise e
 
     def build_chain(self, params):
         board = Pedalboard()
@@ -190,20 +256,12 @@ class StudioDSP:
                     if v is not None:
                         config[k] = v
 
-            # 2. Read Audio
+            # 2. Read Audio (Use Robust Reader)
             try:
-                data, sr = sf.read(input_path)
+                audio, sr = self._read_audio_file(input_path)
             except Exception as e:
-                logger.error(f"Failed to read file with sf.read: {e}")
+                logger.error(f"Failed to read file: {e}")
                 raise e
-
-            # Shape handling: (samples, channels) -> (channels, samples)
-            if data.ndim == 1:
-                data = data[np.newaxis, :]
-            else:
-                data = data.T
-
-            audio = data.astype(np.float32)
 
             # Pre-gain: Reduce input by -3dB to -6dB to create headroom before processing
             # Instead of normalizing UP to -6dB (which boosts quiet tracks), we just attenuate.
@@ -254,23 +312,13 @@ class StudioDSP:
             max_len = 0
 
             for name, path in stems_map.items():
-                data, sr = sf.read(path)
-
-                # Robustly ensure (Channels, Samples) shape
-                # sf.read usually returns (Samples, Channels) e.g. (N, 2)
-                # We want (2, N) for processing
-                if data.ndim == 1:
-                    data = data[np.newaxis, :]  # (1, Samples)
-                else:
-                    # If dim0 > dim1 (Samples > Channels), transpose
-                    if data.shape[0] > data.shape[1]:
-                        data = data.T  # (Samples, Channels) -> (Channels, Samples)
+                # Use Robust Reader
+                data, sr = self._read_audio_file(path)
 
                 # Resample if needed
                 if sr != sample_rate:
                     data = resampy.resample(data, sr, sample_rate, axis=1)
 
-                data = data.astype(np.float32)
                 loaded_stems[name] = data
                 if data.shape[1] > max_len:
                     max_len = data.shape[1]
