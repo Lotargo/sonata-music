@@ -583,6 +583,21 @@ class UpscalerService:
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
+                # Verify output before return
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                     logger.error(f"DSP mode failed: Output file {output_path} is missing or empty.")
+                     return False
+
+                # Verify output before return
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                     logger.error(f"Hybrid mode failed: Output file {output_path} is missing or empty.")
+                     return False
+
+                # Verify output before return
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                     logger.error(f"Restoration mode failed: Output file {output_path} is missing or empty.")
+                     return False
+
                 # Generate metrics before return
                 self._generate_metrics_report(input_path, output_path)
                 return True
@@ -949,6 +964,10 @@ class UpscalerService:
 
             # --- Generate Diagnostics/Metrics ---
             self._generate_metrics_report(input_path, output_path)
+
+            if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                 logger.error(f"AI mode failed: Output file {output_path} is missing or empty.")
+                 return False
 
             logger.info(
                 f"Successfully saved upscaled audio to {output_path}. Final file size: {os.path.getsize(output_path) / (1024*1024):.2f} MB"

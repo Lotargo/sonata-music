@@ -103,12 +103,22 @@ class StudioDSP:
             # 1. Try soundfile
             try:
                 data, sr = sf.read(filepath)
-                # Check for silence (absolute zero) which might indicate decode failure
+                # Check for absolute silence (zeros) which might indicate decode failure
                 if np.max(np.abs(data)) == 0:
                     logger.warning(
                         f"Soundfile read silence for {filepath}. Trying pydub..."
                     )
                     raise ValueError("Silent file")
+
+                # Check for near-silence (extremely low RMS) that is effectively useless
+                # RMS of a sine wave with amplitude 1.0 is 0.707.
+                # -90dB is approx 0.00003
+                rms = np.sqrt(np.mean(data**2))
+                if rms < 1e-6: # -120dB
+                     logger.warning(
+                        f"Soundfile read near-silence (RMS {rms}) for {filepath}. Trying pydub..."
+                    )
+                     raise ValueError("Near-silent file")
 
                 # Shape handling: (samples, channels) -> (channels, samples)
                 if data.ndim == 1:
@@ -149,6 +159,14 @@ class StudioDSP:
                     max_val = np.max(np.abs(raw_data))
                     if max_val > 0:
                         raw_data = raw_data.astype(np.float32) / max_val
+
+                # Post-pydub silence check
+                if np.max(np.abs(raw_data)) == 0:
+                     raise ValueError("Audio file is completely silent after pydub decode.")
+
+                rms = np.sqrt(np.mean(raw_data**2))
+                if rms < 1e-6:
+                     raise ValueError(f"Audio file is near-silent (RMS {rms}) after pydub decode.")
 
                 return raw_data, sr
 
