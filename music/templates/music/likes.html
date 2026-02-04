@@ -1,0 +1,36 @@
+{% extends 'music/base.html' %}
+
+{% block content %}
+<div class="p-8">
+    <h1 class="text-4xl font-bold mb-8">My Likes</h1>
+
+    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+        {% for track in tracks %}
+        <div class="group relative bg-yandex-lightgray p-4 rounded-xl hover:bg-[#333] transition cursor-pointer duration-200 ease-in-out">
+            <div class="relative w-full aspect-square bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-lg">
+                {% if track.cover_image %}
+                    <img src="{{ track.cover_image.url }}" class="object-cover w-full h-full group-hover:scale-105 transition duration-500">
+                {% else %}
+                    <div class="w-full h-full flex items-center justify-center text-gray-500 bg-gradient-to-br from-gray-700 to-gray-800">
+                        <span class="text-4xl">🎵</span>
+                    </div>
+                {% endif %}
+
+                <!-- Play Overlay -->
+                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition backdrop-blur-[1px]">
+                    <button onclick="playTrack('{{ track.audio_file.url }}', '{{ track.title|escapejs }}', '{{ track.artist|escapejs }}', '{% if track.cover_image %}{{ track.cover_image.url }}{% endif %}', '{{ track.id }}', '{{ track.is_liked }}')" class="w-14 h-14 rounded-full bg-yandex-yellow text-black flex items-center justify-center hover:scale-110 transition shadow-xl pl-1">
+                        ▶
+                    </button>
+                </div>
+            </div>
+            <h3 class="font-bold truncate text-lg">{{ track.title }}</h3>
+            <p class="text-sm text-gray-400 truncate">{{ track.artist }}</p>
+        </div>
+        {% empty %}
+        <div class="col-span-full py-20 text-center text-gray-500">
+            <p class="text-xl">You haven't liked any tracks yet.</p>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
