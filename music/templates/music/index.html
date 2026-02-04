@@ -32,7 +32,7 @@
 
                 <!-- Play Overlay -->
                 <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition backdrop-blur-[1px]">
-                    <button onclick="playTrack('{{ track.audio_file.url }}', '{{ track.title|escapejs }}', '{{ track.artist|escapejs }}', '{% if track.cover_image %}{{ track.cover_image.url }}{% endif %}')" class="w-14 h-14 rounded-full bg-yandex-yellow text-black flex items-center justify-center hover:scale-110 transition shadow-xl pl-1">
+                    <button onclick="playTrack('{{ track.audio_file.url }}', '{{ track.title|escapejs }}', '{{ track.artist|escapejs }}', '{% if track.cover_image %}{{ track.cover_image.url }}{% endif %}', '{{ track.id }}', '{{ track.is_liked }}')" class="w-14 h-14 rounded-full bg-yandex-yellow text-black flex items-center justify-center hover:scale-110 transition shadow-xl pl-1">
                         <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                             <path d="M8 5v14l11-7z"/>
                         </svg>

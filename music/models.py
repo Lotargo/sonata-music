@@ -32,6 +32,11 @@ class Track(models.Model):
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # User interactions
+    is_liked = models.BooleanField(default=False)
+    play_count = models.IntegerField(default=0)
+    lyrics = models.TextField(blank=True, null=True)
+
     # Processing settings
     target_format = models.CharField(max_length=10, blank=True, null=True)
     target_bitrate = models.CharField(max_length=20, blank=True, null=True)
