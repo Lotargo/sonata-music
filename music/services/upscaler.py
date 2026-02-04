@@ -166,6 +166,33 @@ class UpscalerService:
         except Exception:
             return False
 
+    def _verify_audio_output(self, filepath):
+        """Checks if the audio file exists, is readable, and is not silent."""
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Output file not found: {filepath}")
+
+        if os.path.getsize(filepath) < 100:
+            raise ValueError(
+                f"Output file is too small ({os.path.getsize(filepath)} bytes): {filepath}"
+            )
+
+        try:
+            data, sr = sf.read(filepath)
+            if data is None or len(data) == 0:
+                raise ValueError("Audio data is empty.")
+
+            peak = np.max(np.abs(data))
+            if peak < 1e-6:
+                raise ValueError(f"Audio is silent (Peak: {peak}).")
+
+            logger.info(
+                f"Audio verification passed for {filepath}. Peak: {peak:.6f}, SR: {sr}"
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Audio verification failed for {filepath}: {e}")
+            raise e
+
     def load_model(self):
         if self.model is None:
             logger.info("Loading AudioSR model...")
@@ -216,6 +243,8 @@ class UpscalerService:
         else:
             # Fallback
             audio.export(output_path, format=out_fmt)
+
+        logger.info(f"Conversion complete: {output_path}")
 
     def unload_model(self):
         """Unloads the model and frees VRAM/RAM."""
@@ -569,6 +598,9 @@ class UpscalerService:
                     sample_rate=target_sample_rate,
                 )
 
+                # Verify intermediate WAV
+                self._verify_audio_output(temp_wav)
+
                 # Convert to target format if needed
                 if target_format.lower() != "wav":
                     if not self.ffmpeg_available:
@@ -579,6 +611,9 @@ class UpscalerService:
                         self._convert_format(
                             temp_wav, output_path, target_format, target_bitrate
                         )
+                        # Verify converted file
+                        self._verify_audio_output(output_path)
+
                         # Cleanup temp
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
@@ -649,6 +684,9 @@ class UpscalerService:
                     logger.error(f"Failed to save hybrid output: {e}")
                     sf.write(temp_wav, matched_waveform.numpy().T, target_sample_rate)
 
+                # Verify intermediate WAV
+                self._verify_audio_output(temp_wav)
+
                 # 6. Convert format if needed
                 if target_format.lower() != "wav":
                     if not self.ffmpeg_available:
@@ -659,6 +697,7 @@ class UpscalerService:
                         self._convert_format(
                             temp_wav, output_path, target_format, target_bitrate
                         )
+                        self._verify_audio_output(output_path)
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
@@ -735,12 +774,16 @@ class UpscalerService:
                 # Write
                 sf.write(temp_wav, polished.T, target_sample_rate)
 
+                # Verify intermediate WAV
+                self._verify_audio_output(temp_wav)
+
                 # Convert
                 if target_format.lower() != "wav":
                     if self.ffmpeg_available:
                         self._convert_format(
                             temp_wav, output_path, target_format, target_bitrate
                         )
+                        self._verify_audio_output(output_path)
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
 
@@ -931,6 +974,9 @@ class UpscalerService:
                     logger.error(f"Failed to save temporary WAV with sf: {e}")
                     raise e
 
+            # Verify intermediate WAV
+            self._verify_audio_output(temp_wav)
+
             if target_format.lower() != "wav":
                 if not self.ffmpeg_available:
                     logger.error(
@@ -940,6 +986,7 @@ class UpscalerService:
                     self._convert_format(
                         temp_wav, output_path, target_format, target_bitrate
                     )
+                    self._verify_audio_output(output_path)
                     if (
                         temp_wav
                         and os.path.exists(temp_wav)

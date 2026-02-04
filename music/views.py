@@ -158,23 +158,27 @@ def process_track(request, track_id):
     except json.JSONDecodeError:
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
 
-    # Extract DSP params separately
-    dsp_params = {
-        "reverb_enabled": data.get("reverb_enabled"),
-        "reverb_size": float(data.get("reverb_size")) if data.get("reverb_size") is not None else None,
-        "reverb_amount": float(data.get("reverb_amount")) if data.get("reverb_amount") is not None else None,
-        "bass_boost": float(data.get("bass_boost")) if data.get("bass_boost") is not None else None,
-        "voice_clarity": float(data.get("voice_clarity")) if data.get("voice_clarity") is not None else None,
-        "compressor_amount": float(data.get("compressor_amount")) if data.get("compressor_amount") is not None else None,
-        "stereo_width": float(data.get("stereo_width")) if data.get("stereo_width") is not None else None,
-    }
+    try:
+        # Extract DSP params separately
+        dsp_params = {
+            "reverb_enabled": data.get("reverb_enabled"),
+            "reverb_size": float(data.get("reverb_size")) if data.get("reverb_size") is not None else None,
+            "reverb_amount": float(data.get("reverb_amount")) if data.get("reverb_amount") is not None else None,
+            "bass_boost": float(data.get("bass_boost")) if data.get("bass_boost") is not None else None,
+            "voice_clarity": float(data.get("voice_clarity")) if data.get("voice_clarity") is not None else None,
+            "compressor_amount": float(data.get("compressor_amount")) if data.get("compressor_amount") is not None else None,
+            "stereo_width": float(data.get("stereo_width")) if data.get("stereo_width") is not None else None,
+        }
 
-    # Update track info if provided
-    if 'title' in data:
-        track.title = data['title']
-    if 'artist' in data:
-        track.artist = data['artist']
-    track.save()
+        # Update track info if provided
+        if 'title' in data:
+            track.title = data['title']
+        if 'artist' in data:
+            track.artist = data['artist']
+        track.save()
+    except Exception as e:
+        logger.error(f"Error updating track params: {e}")
+        return JsonResponse({'error': f"Failed to update track parameters: {str(e)}"}, status=400)
 
     params = {
         'mode': data.get('mode', 'ai'),
