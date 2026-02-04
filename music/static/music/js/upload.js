@@ -69,8 +69,14 @@ async function handleFileSelect(file) {
             currentUploadTrackId = track.id;
             showConfigUI(track);
         } else {
-            const err = await response.json();
-            alert('Upload failed: ' + (err.error || 'Unknown error'));
+            // Robust error handling for non-JSON responses
+            try {
+                const err = await response.json();
+                alert('Upload failed: ' + (err.error || 'Unknown error'));
+            } catch (jsonErr) {
+                console.error("Non-JSON error response:", await response.text());
+                alert('Upload failed: Server error (check console)');
+            }
             resetUploadUI();
         }
     } catch (e) {
@@ -373,14 +379,20 @@ async function startProcessing() {
             if (typeof fetchLibrary === 'function') fetchLibrary();
             else window.location.reload();
         } else {
-            const err = await response.json();
-            alert('Error: ' + err.error);
+            // Robust error handling for non-JSON responses
+            try {
+                const err = await response.json();
+                alert('Error: ' + err.error);
+            } catch (jsonErr) {
+                console.error("Non-JSON error response:", await response.text());
+                alert('Server Error: ' + response.statusText);
+            }
             btn.disabled = false;
             btn.innerHTML = 'Start Processing';
         }
     } catch (e) {
         console.error(e);
-        alert('Network Error');
+        alert('Network Error: ' + e.message);
         btn.disabled = false;
         btn.innerHTML = 'Start Processing';
     }
