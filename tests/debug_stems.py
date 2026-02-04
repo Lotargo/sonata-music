@@ -5,6 +5,7 @@ import tempfile
 import resampy
 from pedalboard import Pedalboard, Gain
 
+
 def debug_process_stems():
     print("Starting Stem Processing Debug...")
 
@@ -15,8 +16,8 @@ def debug_process_stems():
     stems_map = {}
     temp_dir = tempfile.mkdtemp()
 
-    names = ['vocals', 'drums', 'bass', 'other']
-    N = 10000 # samples
+    names = ["vocals", "drums", "bass", "other"]
+    N = 10000  # samples
 
     for name in names:
         # Create stereo audio (Samples, Channels) as sf.write expects
@@ -24,7 +25,7 @@ def debug_process_stems():
         length = N + np.random.randint(-100, 100)
         audio = np.random.uniform(-0.5, 0.5, (length, 2)).astype(np.float32)
         path = os.path.join(temp_dir, f"{name}.wav")
-        sf.write(path, audio, 44100) # Source is 44.1k to trigger resampling path
+        sf.write(path, audio, 44100)  # Source is 44.1k to trigger resampling path
         stems_map[name] = path
 
     print(f"Created dummy stems in {temp_dir}")
@@ -45,7 +46,7 @@ def debug_process_stems():
             if data.ndim == 1:
                 data = data[np.newaxis, :]
             else:
-                data = data.T # Now (channels, samples)
+                data = data.T  # Now (channels, samples)
 
             print(f"[{name}] Before resample: {data.shape}")
             data = resampy.resample(data, sr, sample_rate, axis=1)
@@ -54,7 +55,7 @@ def debug_process_stems():
             if data.ndim == 1:
                 data = data[np.newaxis, :]
             else:
-                data = data.T # (channels, samples)
+                data = data.T  # (channels, samples)
 
         data = data.astype(np.float32)
         loaded_stems[name] = data
@@ -76,12 +77,12 @@ def debug_process_stems():
     print("\n--- Processing Chains ---")
     board = Pedalboard([Gain(gain_db=0)])
 
-    if 'vocals' in loaded_stems:
+    if "vocals" in loaded_stems:
         # Pedalboard expects (channels, samples)
         # Returns (channels, samples)
-        out = board(loaded_stems['vocals'], sample_rate)
+        out = board(loaded_stems["vocals"], sample_rate)
         print(f"[vocals] Pedalboard Output: {out.shape}")
-        loaded_stems['vocals'] = out
+        loaded_stems["vocals"] = out
 
     # Simulate mix
     print("\n--- Mixing ---")
@@ -101,7 +102,9 @@ def debug_process_stems():
 
     # Cleanup
     import shutil
+
     shutil.rmtree(temp_dir)
+
 
 if __name__ == "__main__":
     debug_process_stems()

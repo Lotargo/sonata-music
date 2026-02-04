@@ -11,20 +11,27 @@ sys.modules["audiosr"] = mock_audiosr
 sys.modules["audiosr.pipeline"] = MagicMock()
 sys.modules["audiosr.utils"] = MagicMock()
 
+
 # Setup mocks for functions used in upscaler.py
 # normalize_wav is used in safe_read_wav_file
 def mock_normalize_wav(waveform):
     return waveform
+
+
 sys.modules["audiosr.utils"].normalize_wav = mock_normalize_wav
+
 
 # pad_wav is used in safe_read_wav_file
 def mock_pad_wav(waveform, target_length):
     # Just pad with zeros if needed, or return as is for mock
     import numpy as np
+
     current_len = waveform.shape[-1]
     if current_len < target_length:
-        return np.pad(waveform, ((0,0), (0, target_length - current_len)))
+        return np.pad(waveform, ((0, 0), (0, target_length - current_len)))
     return waveform
+
+
 sys.modules["audiosr.utils"].pad_wav = mock_pad_wav
 
 # Mock pipeline functions
@@ -37,6 +44,7 @@ sys.modules["audiosr.pipeline"].super_resolution = mock_super_resolution
 # Now import the service
 # It will see our mocks
 from app.services.upscaler import upscaler
+
 
 def test_upscaler_sequential_logic():
     print("Testing upscaler sequential logic...")
@@ -64,6 +72,7 @@ def test_upscaler_sequential_logic():
 
     # Save dummy input using soundfile
     import soundfile as sf
+
     sf.write(input_path, waveform.squeeze().numpy(), sr)
 
     try:
@@ -74,7 +83,9 @@ def test_upscaler_sequential_logic():
         # 12s split into 5.12, 5.12, 1.76
         # Expected 3 calls to super_resolution
         print(f"super_resolution call count: {mock_super_resolution.call_count}")
-        assert mock_super_resolution.call_count == 3, f"Expected 3 calls, got {mock_super_resolution.call_count}"
+        assert (
+            mock_super_resolution.call_count == 3
+        ), f"Expected 3 calls, got {mock_super_resolution.call_count}"
 
         # Verify output duration
         if not os.path.exists(output_path):
@@ -97,18 +108,20 @@ def test_upscaler_sequential_logic():
         print(f"Test failed with error: {e}")
         # Expected failure
         if "object has no attribute 'detach'" in str(e):
-             print("SUCCESS: Reproduced expected AttributeError.")
+            print("SUCCESS: Reproduced expected AttributeError.")
         else:
-             print("WARNING: Failed with unexpected error.")
-             import traceback
-             traceback.print_exc()
-             sys.exit(1)
+            print("WARNING: Failed with unexpected error.")
+            import traceback
+
+            traceback.print_exc()
+            sys.exit(1)
     finally:
         # Cleanup
         if os.path.exists(input_path):
             os.remove(input_path)
         if os.path.exists(output_path):
             os.remove(output_path)
+
 
 if __name__ == "__main__":
     test_upscaler_sequential_logic()

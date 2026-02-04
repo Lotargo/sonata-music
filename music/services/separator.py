@@ -10,9 +10,10 @@ import resampy
 
 logger = logging.getLogger(__name__)
 
+
 class SeparatorService:
     def __init__(self):
-        self.model_name = "htdemucs" # Fast, high quality hybrid transformer
+        self.model_name = "htdemucs"  # Fast, high quality hybrid transformer
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
     def separate_track(self, input_path, output_dir):
@@ -34,45 +35,51 @@ class SeparatorService:
 
             # Resample if needed to match model (usually 44100)
             if sr != model.samplerate:
-                logger.info(f"Resampling input from {sr} to {model.samplerate} Hz for separation")
+                logger.info(
+                    f"Resampling input from {sr} to {model.samplerate} Hz for separation"
+                )
                 # wav is (samples, channels) or (samples,)
                 # resampy.resample default axis is 0, which matches samples dimension
                 wav = resampy.resample(wav, sr, model.samplerate, axis=0)
                 sr = model.samplerate
 
-            wav = wav.astype('float32') # Ensure float32 for PyTorch
+            wav = wav.astype("float32")  # Ensure float32 for PyTorch
 
             # Handle Mono -> Stereo
             if wav.ndim == 1:
                 wav = wav.reshape(1, -1)
-                wav = torch.tensor(wav) # (1, samples)
-                wav = wav.repeat(2, 1) # (2, samples)
+                wav = torch.tensor(wav)  # (1, samples)
+                wav = wav.repeat(2, 1)  # (2, samples)
             else:
-                wav = torch.tensor(wav).t() # (samples, channels) -> (channels, samples)
+                wav = torch.tensor(
+                    wav
+                ).t()  # (samples, channels) -> (channels, samples)
 
             # Add batch dim: (1, 2, samples)
             wav = wav.unsqueeze(0).to(self.device)
 
             # 3. Inference
             # shifts=2 for better quality (Bagging) as requested
-            sources = apply_model(model, wav, shifts=2, split=True, overlap=0.25, progress=True)[0]
+            sources = apply_model(
+                model, wav, shifts=2, split=True, overlap=0.25, progress=True
+            )[0]
 
             # sources shape: (4, 2, samples) -> [drums, bass, other, vocals] order usually
             # But demucs.apply returns sources in the order of model.sources
-            source_names = model.sources # ['drums', 'bass', 'other', 'vocals']
+            source_names = model.sources  # ['drums', 'bass', 'other', 'vocals']
 
             stem_paths = {}
             os.makedirs(output_dir, exist_ok=True)
 
             # 4. Save Stems
             for i, name in enumerate(source_names):
-                source = sources[i].cpu() # (2, samples)
+                source = sources[i].cpu()  # (2, samples)
                 filename = f"{name}.wav"
                 path = os.path.join(output_dir, filename)
 
                 # Save using soundfile (safe for our env)
                 # source is (channels, samples), soundfile needs (samples, channels)
-                sf.write(path, source.t().numpy(), model.samplerate, subtype='PCM_24')
+                sf.write(path, source.t().numpy(), model.samplerate, subtype="PCM_24")
                 stem_paths[name] = path
 
             # 5. Cleanup
@@ -88,11 +95,12 @@ class SeparatorService:
         except Exception as e:
             logger.error(f"Separation failed: {e}")
             # Ensure cleanup happens even on error
-            if 'model' in locals():
+            if "model" in locals():
                 del model
             if self.device == "cuda":
                 torch.cuda.empty_cache()
             gc.collect()
             raise e
+
 
 separator = SeparatorService()

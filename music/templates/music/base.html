@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Platform</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        yandex: {
+                            black: '#121212',
+                            yellow: '#fc0',
+                            gray: '#1f1f1f',
+                            lightgray: '#282828'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for webkit */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #121212;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #282828;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #333;
+        }
+    </style>
+</head>
+<body class="bg-yandex-black text-white font-sans h-screen flex overflow-hidden">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-yandex-black flex flex-col border-r border-yandex-gray z-40">
+        <div class="p-6 text-2xl font-bold text-white flex items-center gap-2">
+            <div class="w-8 h-8 bg-yandex-yellow text-black flex items-center justify-center rounded font-serif">Y</div>
+            <span>Music</span>
+        </div>
+        <nav class="flex-1 px-4 space-y-1">
+            <a href="{% url 'index' %}" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition">
+                <span>🏠</span> Home
+            </a>
+            <a href="#" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition">
+                <span>🎵</span> My Collection
+            </a>
+            <div class="pt-4 pb-2 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Playlists</div>
+            <a href="#" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition">
+                <span>❤️</span> Favorites
+            </a>
+        </nav>
+
+        <!-- User Profile Stub -->
+        <div class="p-4 border-t border-yandex-gray">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-gray-600"></div>
+                <div class="text-sm font-medium">User</div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-y-auto pb-24 relative bg-gradient-to-b from-yandex-gray to-yandex-black">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Audio Element -->
+    <audio id="audio-player" class="hidden"></audio>
+
+    <!-- Player Bar (Fixed Bottom) -->
+    <div class="fixed bottom-0 left-0 w-full h-20 bg-yandex-gray border-t border-yandex-lightgray flex items-center px-4 z-50 shadow-2xl">
+        <!-- Controls -->
+        <div class="flex items-center space-x-4 w-64">
+            <button class="text-gray-400 hover:text-white transition">⏮</button>
+            <button onclick="document.getElementById('audio-player').paused ? document.getElementById('audio-player').play() : document.getElementById('audio-player').pause()" class="w-10 h-10 rounded-full bg-yandex-yellow text-black flex items-center justify-center hover:scale-105 transition shadow-lg">
+                ▶
+            </button>
+            <button class="text-gray-400 hover:text-white transition">⏭</button>
+        </div>
+
+        <!-- Track Info -->
+        <div class="flex items-center space-x-3 w-64">
+            <div class="w-12 h-12 bg-gray-700 rounded overflow-hidden shadow-inner flex-shrink-0 relative">
+                <!-- Cover placeholder -->
+                <div id="player-cover-placeholder" class="w-full h-full bg-gray-600 animate-pulse"></div>
+                <img id="player-cover" src="" class="absolute inset-0 w-full h-full object-cover hidden">
+            </div>
+            <div class="overflow-hidden">
+                <div id="player-title" class="text-sm font-bold truncate">Select a track</div>
+                <div id="player-artist" class="text-xs text-gray-400 truncate">...</div>
+            </div>
+            <button class="text-gray-500 hover:text-red-500 transition">♥</button>
+        </div>
+
+        <!-- Scrubber -->
+        <div class="flex-1 mx-8 flex flex-col justify-center">
+             <div class="w-full bg-gray-700 h-1 rounded-full relative cursor-pointer group">
+                 <div class="bg-yandex-yellow h-1 rounded-full w-0 group-hover:bg-yellow-400 relative">
+                    <div class="w-3 h-3 bg-white rounded-full absolute right-0 -top-1 opacity-0 group-hover:opacity-100 shadow"></div>
+                 </div>
+             </div>
+             <div class="flex justify-between text-xs text-gray-500 mt-1 font-mono">
+                <span>0:00</span>
+                <span>0:00</span>
+             </div>
+        </div>
+
+        <!-- Volume/Actions -->
+        <div class="flex items-center space-x-4 w-64 justify-end">
+             <button class="text-gray-400 hover:text-white">HQ</button>
+             <button class="text-gray-400 hover:text-white">🔊</button>
+             <div class="w-24 bg-gray-700 h-1 rounded-full cursor-pointer">
+                 <div class="bg-white h-1 rounded-full w-2/3"></div>
+             </div>
+        </div>
+    </div>
+
+    <script>
+        function playTrack(url, title, artist, coverUrl) {
+            const player = document.getElementById('audio-player');
+            player.src = url;
+            player.play();
+
+            // Update UI
+            document.getElementById('player-title').innerText = title;
+            document.getElementById('player-artist').innerText = artist;
+
+            if(coverUrl && coverUrl !== 'None') {
+                document.getElementById('player-cover').src = coverUrl;
+                document.getElementById('player-cover').classList.remove('hidden');
+                document.getElementById('player-cover-placeholder').classList.add('hidden');
+            } else {
+                document.getElementById('player-cover').classList.add('hidden');
+                document.getElementById('player-cover-placeholder').classList.remove('hidden');
+            }
+        }
+    </script>
+</body>
+</html>

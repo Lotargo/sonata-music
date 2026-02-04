@@ -4,6 +4,7 @@ import soundfile as sf
 import numpy as np
 from app.services.dsp import dsp
 
+
 class TestStudioDSP(unittest.TestCase):
     def setUp(self):
         self.test_input = "test_input.wav"
@@ -11,8 +12,8 @@ class TestStudioDSP(unittest.TestCase):
 
         # Create a dummy silent wav file
         sr = 48000
-        duration = 1.0 # seconds
-        data = np.zeros((int(sr * duration), 2)) # Stereo silence
+        duration = 1.0  # seconds
+        data = np.zeros((int(sr * duration), 2))  # Stereo silence
         sf.write(self.test_input, data, sr)
 
     def tearDown(self):
@@ -48,5 +49,6 @@ class TestStudioDSP(unittest.TestCase):
         data, sr_out = sf.read(self.test_output)
         self.assertEqual(sr_out, 48000)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

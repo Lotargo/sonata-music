@@ -14,10 +14,11 @@ from pedalboard import (
     Gain,
     NoiseGate,
     Distortion,
-    Reverb
+    Reverb,
 )
 
 logger = logging.getLogger(__name__)
+
 
 class StudioDSP:
     def __init__(self):
@@ -27,9 +28,9 @@ class StudioDSP:
                 "reverb_enabled": False,
                 "bass_boost": 0.0,
                 "voice_clarity": 0.0,
-                "compressor_amount": 0.5, # 0-1 scale
+                "compressor_amount": 0.5,  # 0-1 scale
                 "stereo_width": 1.0,
-                "target_lufs": -14.0
+                "target_lufs": -14.0,
             },
             "punchy": {
                 "reverb_enabled": False,
@@ -37,7 +38,7 @@ class StudioDSP:
                 "voice_clarity": 2.0,
                 "compressor_amount": 0.8,
                 "stereo_width": 1.0,
-                "target_lufs": -9.0
+                "target_lufs": -9.0,
             },
             "deep_bass": {
                 "reverb_enabled": False,
@@ -45,7 +46,7 @@ class StudioDSP:
                 "voice_clarity": 1.5,
                 "compressor_amount": 0.6,
                 "stereo_width": 1.0,
-                "target_lufs": -12.0
+                "target_lufs": -12.0,
             },
             "clear": {
                 "reverb_enabled": False,
@@ -53,7 +54,7 @@ class StudioDSP:
                 "voice_clarity": 5.0,
                 "compressor_amount": 0.4,
                 "stereo_width": 1.1,
-                "target_lufs": -14.0
+                "target_lufs": -14.0,
             },
             "warm": {
                 "reverb_enabled": True,
@@ -63,8 +64,8 @@ class StudioDSP:
                 "voice_clarity": -1.0,
                 "compressor_amount": 0.6,
                 "stereo_width": 0.9,
-                "target_lufs": -14.0
-            }
+                "target_lufs": -14.0,
+            },
         }
 
     def _apply_stereo_width(self, audio, width):
@@ -73,7 +74,7 @@ class StudioDSP:
         Audio is (channels, samples).
         """
         if audio.shape[0] != 2:
-            return audio # Cannot widen mono
+            return audio  # Cannot widen mono
 
         # 1 = Normal, <1 = Narrow, >1 = Wide
         if width == 1.0:
@@ -105,7 +106,9 @@ class StudioDSP:
 
                 # "Mud Cut": If boosting heavily (>3dB), cut 250Hz to prevent boxiness/mud
                 if bass_db > 3.0:
-                    board.append(PeakFilter(cutoff_frequency_hz=250, gain_db=-2.5, q=1.0))
+                    board.append(
+                        PeakFilter(cutoff_frequency_hz=250, gain_db=-2.5, q=1.0)
+                    )
 
                 # Add "Tube" warmth (saturation) to bass
                 board.append(Distortion(drive_db=0.3))
@@ -119,11 +122,15 @@ class StudioDSP:
         if clarity != 0:
             # "Clarity" is an abstract 0-10 or dB scale? Let's assume input is roughly dB-like or 0-5 scale.
             # Cut mud
-            board.append(PeakFilter(cutoff_frequency_hz=300, gain_db=-(clarity * 0.5), q=1.0))
+            board.append(
+                PeakFilter(cutoff_frequency_hz=300, gain_db=-(clarity * 0.5), q=1.0)
+            )
             # Boost presence
             board.append(PeakFilter(cutoff_frequency_hz=4000, gain_db=clarity, q=0.7))
             # Air
-            board.append(HighShelfFilter(cutoff_frequency_hz=10000, gain_db=clarity * 0.5))
+            board.append(
+                HighShelfFilter(cutoff_frequency_hz=10000, gain_db=clarity * 0.5)
+            )
 
         # 4. Compressor
         # Map 0-1 "amount" to Threshold/Ratio
@@ -135,14 +142,20 @@ class StudioDSP:
             ratio = 1.5 + (comp_amt * 2.5)
             # Attack: 30ms (Preserve transients/punch)
             # Release: 250ms (Smooth response, prevents distortion)
-            board.append(Compressor(threshold_db=threshold, ratio=ratio, attack_ms=30, release_ms=250))
+            board.append(
+                Compressor(
+                    threshold_db=threshold, ratio=ratio, attack_ms=30, release_ms=250
+                )
+            )
 
         # 5. Reverb
         if params.get("reverb_enabled", False):
-            room_size = params.get("reverb_size", 0.5) # 0-1
-            wet_level = params.get("reverb_amount", 0.3) # 0-1
+            room_size = params.get("reverb_size", 0.5)  # 0-1
+            wet_level = params.get("reverb_amount", 0.3)  # 0-1
             # Pedalboard Reverb: room_size (0-1), wet_level (0-1), dry_level (0-1)
-            board.append(Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0))
+            board.append(
+                Reverb(room_size=room_size, wet_level=wet_level, dry_level=1.0)
+            )
 
         # 6. Limiter (Safety)
         # Pedalboard Limiter caps at 0dB. We add Gain to enforce -1.0 dB safety ceiling.
@@ -151,7 +164,14 @@ class StudioDSP:
 
         return board
 
-    def process(self, input_path, output_path, params=None, preset_name="mastering", sample_rate=48000):
+    def process(
+        self,
+        input_path,
+        output_path,
+        params=None,
+        preset_name="mastering",
+        sample_rate=48000,
+    ):
         """
         Process audio with DSP.
         params: dict of specific settings. If None, uses preset_name to load defaults.
@@ -161,7 +181,9 @@ class StudioDSP:
         try:
             # 1. Resolve Parameters
             # Start with preset defaults
-            config = self.preset_configs.get(preset_name, self.preset_configs["mastering"]).copy()
+            config = self.preset_configs.get(
+                preset_name, self.preset_configs["mastering"]
+            ).copy()
             # Overlay custom params if provided
             if params:
                 for k, v in params.items():
@@ -186,7 +208,7 @@ class StudioDSP:
             # Pre-gain: Reduce input by -3dB to -6dB to create headroom before processing
             # Instead of normalizing UP to -6dB (which boosts quiet tracks), we just attenuate.
             # If the track is already loud (0dB), this brings it to -3dB.
-            audio = audio * 0.707 # -3dB attenuation
+            audio = audio * 0.707  # -3dB attenuation
 
             # 3. Resample
             if sr != sample_rate:
@@ -210,7 +232,7 @@ class StudioDSP:
 
             # Determine subtype (no easy way to pass this via params currently without changing signature massively)
             # Default to 24-bit for internal DSP
-            sf.write(output_path, processed.T, sample_rate, subtype='PCM_24')
+            sf.write(output_path, processed.T, sample_rate, subtype="PCM_24")
 
             logger.info("DSP processing complete.")
             return True
@@ -238,11 +260,11 @@ class StudioDSP:
                 # sf.read usually returns (Samples, Channels) e.g. (N, 2)
                 # We want (2, N) for processing
                 if data.ndim == 1:
-                    data = data[np.newaxis, :] # (1, Samples)
+                    data = data[np.newaxis, :]  # (1, Samples)
                 else:
                     # If dim0 > dim1 (Samples > Channels), transpose
                     if data.shape[0] > data.shape[1]:
-                        data = data.T # (Samples, Channels) -> (Channels, Samples)
+                        data = data.T  # (Samples, Channels) -> (Channels, Samples)
 
                 # Resample if needed
                 if sr != sample_rate:
@@ -257,57 +279,73 @@ class StudioDSP:
             for name in loaded_stems:
                 curr = loaded_stems[name]
                 if curr.shape[1] < max_len:
-                    pad = np.zeros((curr.shape[0], max_len - curr.shape[1]), dtype=np.float32)
+                    pad = np.zeros(
+                        (curr.shape[0], max_len - curr.shape[1]), dtype=np.float32
+                    )
                     loaded_stems[name] = np.concatenate([curr, pad], axis=1)
 
             # --- Define Chains ---
 
             # 1. Vocals Chain: Clear up harshness, add air, gentle compression
             vocals_board = Pedalboard()
-            vocals_board.append(HighpassFilter(cutoff_frequency_hz=90)) # Cut rumble
+            vocals_board.append(HighpassFilter(cutoff_frequency_hz=90))  # Cut rumble
             # Cut harshness in 3-4kHz range (common in Suno/AI)
-            vocals_board.append(PeakFilter(cutoff_frequency_hz=3500, gain_db=-2.5, q=1.5))
+            vocals_board.append(
+                PeakFilter(cutoff_frequency_hz=3500, gain_db=-2.5, q=1.5)
+            )
             # Gentle Air boost
             vocals_board.append(HighShelfFilter(cutoff_frequency_hz=12000, gain_db=1.5))
             # Vocal Compressor (Fast attack to catch peaks)
-            vocals_board.append(Compressor(threshold_db=-16, ratio=2.5, attack_ms=5, release_ms=100))
+            vocals_board.append(
+                Compressor(threshold_db=-16, ratio=2.5, attack_ms=5, release_ms=100)
+            )
 
             # 2. Drums/Bass Chain: Punch and Depth
             rhythm_board = Pedalboard()
-            bass_boost = params.get('bass_boost', 0.0) if params else 0.0
+            bass_boost = params.get("bass_boost", 0.0) if params else 0.0
             # Only apply boost if explicitly requested.
             # Default "Balanced" preset usually has 0.0, so this stays neutral.
             if bass_boost > 0:
-                rhythm_board.append(LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost))
+                rhythm_board.append(
+                    LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost)
+                )
             elif bass_boost < 0:
-                 rhythm_board.append(LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost))
+                rhythm_board.append(
+                    LowShelfFilter(cutoff_frequency_hz=80, gain_db=bass_boost)
+                )
 
             # Removed commented-out Distortion to ensure no accidental saturation
 
             # 3. Other (Synths) Chain: Width
             # (Handled via widener function usually, but we can do simple EQ here)
             other_board = Pedalboard()
-            other_board.append(HighpassFilter(cutoff_frequency_hz=150)) # Clean space for bass
+            other_board.append(
+                HighpassFilter(cutoff_frequency_hz=150)
+            )  # Clean space for bass
 
             # --- Process ---
 
             # Process Vocals
-            if 'vocals' in loaded_stems:
-                loaded_stems['vocals'] = vocals_board(loaded_stems['vocals'], sample_rate)
+            if "vocals" in loaded_stems:
+                loaded_stems["vocals"] = vocals_board(
+                    loaded_stems["vocals"], sample_rate
+                )
 
             # Process Drums
-            if 'drums' in loaded_stems:
-                loaded_stems['drums'] = rhythm_board(loaded_stems['drums'], sample_rate)
+            if "drums" in loaded_stems:
+                loaded_stems["drums"] = rhythm_board(loaded_stems["drums"], sample_rate)
 
             # Process Bass
-            if 'bass' in loaded_stems:
-                 loaded_stems['bass'] = rhythm_board(loaded_stems['bass'], sample_rate)
+            if "bass" in loaded_stems:
+                loaded_stems["bass"] = rhythm_board(loaded_stems["bass"], sample_rate)
 
             # Process Other
-            if 'other' in loaded_stems:
-                 loaded_stems['other'] = other_board(loaded_stems['other'], sample_rate)
-                 # Widen 'other' specifically
-                 loaded_stems['other'] = self._apply_stereo_width(loaded_stems['other'], 1.2)
+            if "other" in loaded_stems:
+                loaded_stems["other"] = other_board(loaded_stems["other"], sample_rate)
+                # Widen 'other' specifically
+                loaded_stems["other"] = self._apply_stereo_width(
+                    loaded_stems["other"], 1.2
+                )
 
             # --- Mix ---
             # Simple summation
@@ -328,12 +366,12 @@ class StudioDSP:
             # Use provided params or default to mastering
             master_config = self.preset_configs["mastering"].copy()
             if params:
-                for k,v in params.items():
+                for k, v in params.items():
                     if v is not None:
                         master_config[k] = v
 
             # Remove bass boost from master since we applied it to stems
-            master_config['bass_boost'] = 0.0
+            master_config["bass_boost"] = 0.0
 
             master_board = self.build_chain(master_config)
             final_mix = master_board(mix, sample_rate)
@@ -384,12 +422,14 @@ class StudioDSP:
 
             # --- Glue Compressor ---
             # "Mastering" style glue to bring elements together after separation
-            board.append(Compressor(
-                threshold_db=-12,
-                ratio=2.5,
-                attack_ms=15,   # Moderate attack to catch peaks but keep punch
-                release_ms=150  # Moderate release for musical breathing
-            ))
+            board.append(
+                Compressor(
+                    threshold_db=-12,
+                    ratio=2.5,
+                    attack_ms=15,  # Moderate attack to catch peaks but keep punch
+                    release_ms=150,  # Moderate release for musical breathing
+                )
+            )
 
             # --- Safety Limiter ---
             # Pedalboard Limiter caps at 0dB. We add Gain to enforce -1.0 dB safety ceiling.
@@ -404,6 +444,7 @@ class StudioDSP:
         except Exception as e:
             logger.error(f"Suno restoration polish failed: {e}")
             raise e
+
 
 # Create singleton
 dsp = StudioDSP()
