@@ -130,7 +130,9 @@ def run_upscaling_thread(track_id, params):
         if success:
             track.status = 'completed'
             # Save relative path to FileField
-            track.processed_file.name = os.path.join('processed', output_filename)
+            # Force forward slashes for cross-platform compatibility (especially for URLs)
+            relative_path = os.path.join('processed', output_filename)
+            track.processed_file.name = relative_path.replace('\\', '/')
         else:
             track.status = 'failed'
 

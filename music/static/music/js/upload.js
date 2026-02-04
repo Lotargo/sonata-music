@@ -381,10 +381,15 @@ async function startProcessing() {
 
         if (response.ok) {
             closeUploadModal();
-            // Refresh library or notify user
+            // Notify user processing started
+            const btn = document.getElementById('start-process-btn');
+
             // Assuming there is a function to refresh library in parent
-            if (typeof fetchLibrary === 'function') fetchLibrary();
-            else window.location.reload();
+            if (typeof fetchLibrary === 'function') {
+                await fetchLibrary(); // Refresh list to show "Processing" status immediately
+            } else {
+                window.location.reload();
+            }
         } else {
             // Robust error handling for non-JSON responses
             try {

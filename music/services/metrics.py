@@ -3,6 +3,10 @@ import json
 import logging
 import soundfile as sf
 import numpy as np
+import matplotlib
+
+# Set non-interactive backend to avoid GUI thread issues
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 logger = logging.getLogger(__name__)
