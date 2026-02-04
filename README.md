@@ -1,6 +1,6 @@
-# AudioSR Pro: AI-Powered Audio Upscaler & Library
+# AudioSR Pro: AI-Powered Music Platform
 
-An ambitious project to transform low-quality audio (e.g., from Suno) into high-fidelity music using state-of-the-art AI.
+An ambitious project to transform low-quality audio (e.g., from Suno) into high-fidelity music using state-of-the-art AI, now featuring a scalable Django backend and a sleek "Yandex Music"-style interface.
 
 ## 🚀 Features
 
@@ -9,31 +9,28 @@ An ambitious project to transform low-quality audio (e.g., from Suno) into high-
 - **Customizable Output**: Choose your preferred format (**MP3, WAV, FLAC, OGG**).
 - **Quality Control**: Configure target **Sample Rate** (up to 96kHz) and **Bitrate** (up to 4608kbps).
 
-### 🎨 Professional Web Interface
-- **SoundCloud-Style Player**: Interactive waveforms powered by `Wavesurfer.js`.
+### 🎨 Professional Web Interface (New!)
+- **Yandex Music Aesthetic**: Dark theme, fixed player bar, and intuitive sidebar navigation.
 - **Modern Library**: Card-based grid with auto-extracted **Cover Art** and **Metadata** (Title, Artist).
-- **Seamless Experience**: Drag & drop uploads, real-time processing status, and responsive design using Tailwind CSS.
-- **Full Control**: Edit track details or remove files from your library directly from the UI.
+- **Seamless Playback**: Integrated HTML5 audio player with persistent controls.
 
-### ⚙️ Robust Backend
+### ⚙️ Robust Backend (Django)
+- **Framework**: Migrated to **Django 5** for scalability, security, and built-in administration.
 - **NVIDIA CUDA Ready**: Automatic GPU detection with a reliable CPU fallback.
-- **Async Processing**: Multi-threaded upscaling so you can keep browsing while the AI works.
-- **SQLite Persistence**: Reliable storage for your library and settings.
+- **Async Processing**: Multi-threaded upscaling (logic preserved in `music/services`).
 
 ## 🛠️ Technology Stack
 
-- **Backend**: Python 3.10, Flask, SQLAlchemy
+- **Backend**: Python 3.10, Django 5, SQLite
 - **AI/DSP**: AudioSR, PyTorch, Torchaudio, Pydub, Mutagen
-- **Frontend**: Tailwind CSS, Wavesurfer.js, Lucide Icons
+- **Frontend**: Django Templates, Tailwind CSS (CDN), Vanilla JS
 - **Tooling**: `uv` for lightning-fast dependency management
 
 ## 📦 Installation
 
-This project supports both `uv` and `poetry`.
+This project uses `uv` for dependency management.
 
-### Option A: Using `uv` (Recommended for speed)
-
-1.  **Install `uv`**:
+1.  **Install `uv`** (if not already installed):
     ```bash
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
@@ -43,45 +40,38 @@ This project supports both `uv` and `poetry`.
     uv sync
     ```
 
-### Option B: Using `poetry`
-
-1.  **Install Dependencies**:
+3.  **Apply Database Migrations**:
     ```bash
-    poetry install
+    uv run python manage.py migrate
     ```
-
-### Verify Environment
-
-Regardless of the manager used, verify your system is ready (Python 3.10 and CUDA detection):
-```bash
-# Using uv
-uv run check_env.py
-
-# Using poetry
-poetry run python check_env.py
-```
 
 ## 🚀 Getting Started
 
-1.  **Launch the Application**:
+The frontend is integrated directly into the Django backend. You only need to start one server.
+
+1.  **Launch the Server**:
     ```bash
-    uv run main.py
+    uv run python manage.py runserver
     ```
 2.  **Open in Browser**:
-    Navigate to `http://localhost:5000` to access the interface.
+    Navigate to `http://127.0.0.1:8000` to access the interface.
 
 ## 📁 Project Structure
 
-- `app/`:
-    - `templates/`: HTML interface.
-    - `static/`: Frontend assets (CSS, JS, Extracted Covers).
-    - `services/`: AI upscaling, metadata extraction, and format conversion.
-    - `models.py`: SQLite database schema.
-    - `routes.py`: API and frontend routing.
-- `uploads/`: Raw original files.
-- `library/`: High-quality upscaled results.
+- `config/`: Django project settings and configuration.
+- `music/`: Main Django application.
+    - `templates/`: HTML interface (base, index, upload).
+    - `services/`: AI upscaling, DSP, and logic (ported from Flask).
+    - `models.py`: Database schema for Tracks.
+    - `views.py`: Request handlers.
+- `legacy_flask/`: Archived Flask application (for reference).
+- `media/`:
+    - `uploads/`: Raw original files.
+    - `covers/`: Uploaded cover art.
+    - `processed/`: Upscaled results.
 
 ## ⚠️ Notes
 
 - **Initial Run**: The first upscaling task will automatically download the required AudioSR model weights (~2GB).
 - **Performance**: While CPU works perfectly, an **NVIDIA GPU** is highly recommended for near-instant generation.
+- **Development**: This project currently runs in `DEBUG` mode with a development secret key unless configured via environment variables.
