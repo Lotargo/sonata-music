@@ -380,7 +380,7 @@ async function startProcessing() {
         }
     } catch (e) {
         console.error(e);
-        alert('Network Error');
+        alert('Network Error: ' + (e.message || e));
         btn.disabled = false;
         btn.innerHTML = 'Start Processing';
     }
