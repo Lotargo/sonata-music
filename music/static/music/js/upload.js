@@ -115,12 +115,19 @@ function showConfigUI(track) {
 function resetUpload() {
     // Reset Vars
     currentUploadTrackId = null;
-    document.getElementById('file-input').value = '';
 
-    // Reset UI
+    // Safely clear file input if it exists (it might be gone if loading spinner is shown)
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) fileInput.value = '';
+
+    // Reset UI (this re-creates the file input anyway)
     resetUploadUI();
-    document.getElementById('input-title').value = '';
-    document.getElementById('input-artist').value = '';
+
+    const titleInput = document.getElementById('input-title');
+    if (titleInput) titleInput.value = '';
+
+    const artistInput = document.getElementById('input-artist');
+    if (artistInput) artistInput.value = '';
     document.getElementById('start-process-btn').disabled = true;
     document.getElementById('start-process-btn').innerHTML = 'Start Processing';
 }

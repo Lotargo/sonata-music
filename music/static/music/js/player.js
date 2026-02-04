@@ -215,10 +215,10 @@ function playPrev() {
 // The buttons in base.html don't have onclicks yet for prev/next
 document.addEventListener('DOMContentLoaded', () => {
     // Attach handlers
-    const skipBack = document.querySelector('i[data-lucide="skip-back"]').closest('button');
-    const skipFwd = document.querySelector('i[data-lucide="skip-forward"]').closest('button');
-    const shuffleBtn = document.querySelector('i[data-lucide="shuffle"]').closest('button');
-    const repeatBtn = document.querySelector('i[data-lucide="repeat"]').closest('button');
+    const skipBack = document.getElementById('btn-prev');
+    const skipFwd = document.getElementById('btn-next');
+    const shuffleBtn = document.getElementById('btn-shuffle');
+    const repeatBtn = document.getElementById('btn-repeat');
 
     if (skipBack) skipBack.onclick = playPrev;
     if (skipFwd) skipFwd.onclick = playNext;
