@@ -5,7 +5,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Music Platform</title>
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Libraries -->
+    <script src="https://unpkg.com/wavesurfer.js@7"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
     <link rel="stylesheet" href="{% static 'music/css/style.css' %}">
     <script>
         tailwind.config = {
@@ -17,222 +24,184 @@
                             black: '#121212',
                             yellow: '#fc0',
                             gray: '#1f1f1f',
-                            lightgray: '#282828'
+                            lightgray: '#282828',
+                            sidebar: '#181818'
                         }
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
                     }
                 }
             }
         }
     </script>
-    <style>
-        /* Custom scrollbar for webkit */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #121212;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #282828;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: #333;
-        }
-    </style>
 </head>
-<body class="bg-yandex-black text-white font-sans h-screen flex overflow-hidden">
+<body class="bg-yandex-black text-white font-sans h-screen flex overflow-hidden selection:bg-yandex-yellow selection:text-black">
+
+    <!-- Atmospheric Visualization Background -->
+    <div id="bg-visual" class="fixed inset-0 -z-10 bg-gradient-to-b from-gray-900 to-black transition-all duration-1000 ease-in-out">
+        <div id="bg-visual-image" class="absolute inset-0 bg-cover bg-center opacity-30 blur-3xl scale-110 transition-all duration-1000"></div>
+        <div class="absolute inset-0 bg-black/60"></div>
+    </div>
+
     <!-- Sidebar -->
-    <aside class="w-64 bg-yandex-black flex flex-col border-r border-yandex-gray z-40 flex-shrink-0">
-        <div class="p-6 text-2xl font-bold text-white flex items-center gap-2">
-            <div class="w-8 h-8 bg-yandex-yellow text-black flex items-center justify-center rounded font-serif">Y</div>
-            <span>Music</span>
+    <aside class="w-64 bg-black/40 backdrop-blur-xl border-r border-white/5 z-40 flex flex-col flex-shrink-0 h-full pb-24">
+        <!-- Logo -->
+        <div class="p-6 flex items-center gap-3">
+             <div class="w-8 h-8 bg-yandex-yellow text-black flex items-center justify-center rounded font-serif font-bold text-xl">Y</div>
+             <span class="text-xl font-bold tracking-tight">Music</span>
         </div>
-        <nav class="flex-1 px-4 space-y-1">
-            <a href="{% url 'index' %}" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition {% if request.resolver_match.url_name == 'index' %}bg-yandex-lightgray text-white{% endif %}">
-                <span>🏠</span> Home
+
+        <!-- Navigation -->
+        <nav class="flex-1 px-3 space-y-1 overflow-y-auto">
+            <a href="{% url 'index' %}" class="flex items-center gap-4 py-3 px-4 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition group {% if request.resolver_match.url_name == 'index' %}text-white bg-white/10{% endif %}">
+                <i data-lucide="house" class="w-5 h-5 group-hover:text-yandex-yellow transition-colors"></i>
+                <span class="font-medium">Home</span>
             </a>
-            <a href="{% url 'history' %}" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition {% if request.resolver_match.url_name == 'history' %}bg-yandex-lightgray text-white{% endif %}">
-                <span>🕒</span> History
+            <a href="{% url 'history' %}" class="flex items-center gap-4 py-3 px-4 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition group {% if request.resolver_match.url_name == 'history' %}text-white bg-white/10{% endif %}">
+                <i data-lucide="history" class="w-5 h-5 group-hover:text-yandex-yellow transition-colors"></i>
+                <span class="font-medium">History</span>
             </a>
-            <a href="{% url 'likes' %}" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition {% if request.resolver_match.url_name == 'likes' %}bg-yandex-lightgray text-white{% endif %}">
-                <span>❤️</span> Likes
+            <a href="{% url 'likes' %}" class="flex items-center gap-4 py-3 px-4 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition group {% if request.resolver_match.url_name == 'likes' %}text-white bg-white/10{% endif %}">
+                <i data-lucide="heart" class="w-5 h-5 group-hover:text-red-500 transition-colors"></i>
+                <span class="font-medium">Likes</span>
             </a>
-            <div class="pt-4 pb-2 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">Account</div>
-            <a href="{% url 'account' %}" class="flex items-center gap-3 py-2 px-4 rounded text-gray-300 hover:bg-yandex-lightgray hover:text-white transition {% if request.resolver_match.url_name == 'account' %}bg-yandex-lightgray text-white{% endif %}">
-                <span>👤</span> Profile
-            </a>
+
+            <div class="pt-6 pb-2 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">My Music</div>
+            <!-- Add more links here if needed -->
         </nav>
 
-        <!-- User Profile Stub -->
-        <div class="p-4 border-t border-yandex-gray">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-gray-600 flex items-center justify-center text-xs">U</div>
-                <div class="text-sm font-medium">User</div>
-            </div>
+        <!-- Profile (Moved to Bottom) -->
+        <div class="p-4 border-t border-white/5 mt-auto">
+            <a href="{% url 'account' %}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition group">
+                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-sm font-bold shadow-lg">
+                    U
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-white truncate group-hover:text-yandex-yellow transition-colors">User Profile</p>
+                    <p class="text-xs text-gray-500 truncate">Account Settings</p>
+                </div>
+                <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500"></i>
+            </a>
         </div>
     </aside>
 
     <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto pb-24 relative bg-gradient-to-b from-yandex-gray to-yandex-black">
+    <main class="flex-1 overflow-y-auto pb-32 relative scroll-smooth" id="main-content">
+        <!-- Top Bar (Optional, for search/upload) -->
+        <header class="sticky top-0 z-30 px-8 py-4 flex justify-between items-center bg-transparent">
+             <div class="flex-1"></div> <!-- Spacer for now -->
+             <button onclick="openUploadModal()" class="bg-yandex-yellow hover:bg-yellow-400 text-black px-5 py-2.5 rounded-full font-bold transition shadow-lg flex items-center gap-2 hover:scale-105 active:scale-95">
+                 <i data-lucide="upload" class="w-4 h-4"></i>
+                 <span>Upload Track</span>
+             </button>
+        </header>
+
         {% block content %}{% endblock %}
     </main>
+
+    <!-- Modals Placeholders -->
+    <div id="upload-modal-container">
+        {% include 'music/components/upload_modal.html' %}
+    </div>
+
+    <div id="details-modal-container">
+        {% include 'music/components/details_modal.html' %}
+    </div>
 
     <!-- Audio Element -->
     <audio id="audio-player" class="hidden"></audio>
 
     <!-- Player Bar (Fixed Bottom) -->
-    <div class="fixed bottom-0 left-0 w-full h-20 bg-yandex-gray border-t border-yandex-lightgray flex items-center px-4 z-50 shadow-2xl">
-        <!-- Controls -->
-        <div class="flex items-center space-x-4 w-64">
-            <button class="text-gray-400 hover:text-white transition">⏮</button>
-            <button id="play-pause-btn" onclick="togglePlay()" class="w-10 h-10 rounded-full bg-yandex-yellow text-black flex items-center justify-center hover:scale-105 transition shadow-lg">
-                ▶
-            </button>
-            <button class="text-gray-400 hover:text-white transition">⏭</button>
+    <!-- We will update this in Step 5, keeping existing structure slightly modified for now or using placeholder -->
+    <div id="player-bar" class="fixed bottom-0 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border-t border-white/5 h-24 px-6 z-50 flex items-center justify-between shadow-2xl transition-transform duration-300 translate-y-0">
+        <!-- Will be fully refactored in Step 5 -->
+        <div class="flex items-center gap-4 w-[30%]">
+             <!-- Placeholder Cover -->
+             <div class="w-14 h-14 bg-gray-800 rounded-md overflow-hidden relative shadow-lg group">
+                  <img id="player-cover" src="" class="w-full h-full object-cover hidden">
+                  <div id="player-cover-placeholder" class="w-full h-full flex items-center justify-center text-gray-600">
+                      <i data-lucide="music" class="w-6 h-6"></i>
+                  </div>
+             </div>
+             <div class="min-w-0">
+                 <h4 id="player-title" class="font-bold text-sm text-white truncate">Select a track</h4>
+                 <p id="player-artist" class="text-xs text-gray-400 truncate">Unknown Artist</p>
+             </div>
+             <button id="like-btn" class="text-gray-500 hover:text-red-500 transition ml-2" onclick="toggleLikeCurrentTrack()">
+                 <i data-lucide="heart" class="w-5 h-5"></i>
+             </button>
         </div>
 
-        <!-- Track Info -->
-        <div class="flex items-center space-x-3 w-64">
-            <div class="w-12 h-12 bg-gray-700 rounded overflow-hidden shadow-inner flex-shrink-0 relative">
-                <!-- Cover placeholder -->
-                <div id="player-cover-placeholder" class="w-full h-full bg-gray-600 animate-pulse"></div>
-                <img id="player-cover" src="" class="absolute inset-0 w-full h-full object-cover hidden">
-            </div>
-            <div class="overflow-hidden">
-                <div id="player-title" class="text-sm font-bold truncate">Select a track</div>
-                <div id="player-artist" class="text-xs text-gray-400 truncate">...</div>
-            </div>
-            <button id="like-btn" class="text-gray-500 hover:text-red-500 transition" onclick="toggleLikeCurrentTrack()">♥</button>
-        </div>
-
-        <!-- Scrubber -->
-        <div class="flex-1 mx-8 flex flex-col justify-center">
-             <div class="w-full bg-gray-700 h-1 rounded-full relative cursor-pointer group" onclick="seek(event)">
-                 <div id="progress-bar" class="bg-yandex-yellow h-1 rounded-full w-0 group-hover:bg-yellow-400 relative">
-                    <div class="w-3 h-3 bg-white rounded-full absolute right-0 -top-1 opacity-0 group-hover:opacity-100 shadow"></div>
+        <div class="flex flex-col items-center max-w-2xl w-[40%]">
+             <div class="flex items-center gap-6 mb-1">
+                 <button class="text-gray-400 hover:text-white transition"><i data-lucide="shuffle" class="w-4 h-4"></i></button>
+                 <button class="text-gray-400 hover:text-white transition"><i data-lucide="skip-back" class="w-5 h-5"></i></button>
+                 <button id="play-pause-btn" onclick="togglePlay()" class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition shadow-lg">
+                     <i data-lucide="play" class="fill-current w-4 h-4 ml-0.5"></i>
+                 </button>
+                 <button class="text-gray-400 hover:text-white transition"><i data-lucide="skip-forward" class="w-5 h-5"></i></button>
+                 <button class="text-gray-400 hover:text-white transition"><i data-lucide="repeat" class="w-4 h-4"></i></button>
+             </div>
+             <div class="w-full flex items-center gap-3 text-xs font-mono text-gray-500">
+                 <span id="current-time">0:00</span>
+                 <div class="flex-1 bg-gray-700 h-1 rounded-full relative cursor-pointer group" onclick="seek(event)">
+                     <div id="progress-bar" class="bg-white h-full rounded-full w-0 relative">
+                         <div class="w-3 h-3 bg-white rounded-full absolute right-0 -top-1 opacity-0 group-hover:opacity-100 shadow transition-opacity"></div>
+                     </div>
                  </div>
-             </div>
-             <div class="flex justify-between text-xs text-gray-500 mt-1 font-mono">
-                <span id="current-time">0:00</span>
-                <span id="duration">0:00</span>
+                 <span id="duration">0:00</span>
              </div>
         </div>
 
-        <!-- Volume/Actions -->
-        <div class="flex items-center space-x-4 w-64 justify-end">
-             <a id="karaoke-link" href="#" class="text-gray-400 hover:text-white hidden" title="Lyrics">🎤</a>
-             <button class="text-gray-400 hover:text-white">🔊</button>
-             <div class="w-24 bg-gray-700 h-1 rounded-full cursor-pointer">
-                 <div class="bg-white h-1 rounded-full w-2/3"></div>
+        <div class="flex items-center justify-end gap-4 w-[30%]">
+             <a id="karaoke-link" href="#" class="text-gray-400 hover:text-white transition hidden" title="Lyrics">
+                 <i data-lucide="mic-2" class="w-5 h-5"></i>
+             </a>
+             <div class="flex items-center gap-2 group">
+                 <i data-lucide="volume-2" class="w-5 h-5 text-gray-400"></i>
+                 <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" class="w-24 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-white">
              </div>
         </div>
     </div>
 
+    <!-- Scripts -->
     <script>
-        let currentTrackId = null;
-        const player = document.getElementById('audio-player');
-        const playBtn = document.getElementById('play-pause-btn');
-        const progressBar = document.getElementById('progress-bar');
-        const currentTimeEl = document.getElementById('current-time');
-        const durationEl = document.getElementById('duration');
-        const likeBtn = document.getElementById('like-btn');
-        const karaokeLink = document.getElementById('karaoke-link');
+        lucide.createIcons();
 
-        function playTrack(url, title, artist, coverUrl, trackId, isLiked) {
-            currentTrackId = trackId;
-            player.src = url;
-            player.play();
-            updatePlayButton(true);
-
-            // Update UI
-            document.getElementById('player-title').innerText = title;
-            document.getElementById('player-artist').innerText = artist;
-
-            if(coverUrl && coverUrl !== 'None' && coverUrl !== '') {
-                document.getElementById('player-cover').src = coverUrl;
-                document.getElementById('player-cover').classList.remove('hidden');
-                document.getElementById('player-cover-placeholder').classList.add('hidden');
-            } else {
-                document.getElementById('player-cover').classList.add('hidden');
-                document.getElementById('player-cover-placeholder').classList.remove('hidden');
-            }
-
-            // Update Like Button
-            updateLikeButtonState(isLiked === 'True' || isLiked === true);
-
-            // Update Karaoke Link
-            karaokeLink.href = `/karaoke/${trackId}/`;
-            karaokeLink.classList.remove('hidden');
-
-            // Record Play
-            fetch(`/api/play/${trackId}/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
+        // CSRF Token Helper
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
                 }
-            });
-        }
-
-        function togglePlay() {
-            if (player.paused) {
-                player.play();
-                updatePlayButton(true);
-            } else {
-                player.pause();
-                updatePlayButton(false);
             }
+            return cookieValue;
         }
 
-        function updatePlayButton(isPlaying) {
-            playBtn.innerText = isPlaying ? '⏸' : '▶';
-        }
+        const csrftoken = getCookie('csrftoken');
 
-        function updateLikeButtonState(isLiked) {
-            if (isLiked) {
-                likeBtn.classList.add('text-red-500');
-                likeBtn.classList.remove('text-gray-500');
+        // Background Visualization Logic
+        function updateBackground(imageUrl) {
+            const bg = document.getElementById('bg-visual-image');
+            if (imageUrl && imageUrl !== 'None' && imageUrl !== '') {
+                bg.style.backgroundImage = `url('${imageUrl}')`;
             } else {
-                likeBtn.classList.add('text-gray-500');
-                likeBtn.classList.remove('text-red-500');
+                bg.style.backgroundImage = 'none';
             }
-        }
-
-        function toggleLikeCurrentTrack() {
-            if (!currentTrackId) return;
-
-            fetch(`/api/like/${currentTrackId}/`, {
-                method: 'POST',
-                headers: {
-                    'X-CSRFToken': '{{ csrf_token }}'
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                updateLikeButtonState(data.is_liked);
-            });
-        }
-
-        player.addEventListener('timeupdate', () => {
-            const percent = (player.currentTime / player.duration) * 100;
-            progressBar.style.width = `${percent}%`;
-            currentTimeEl.innerText = formatTime(player.currentTime);
-            durationEl.innerText = formatTime(player.duration);
-        });
-
-        function formatTime(seconds) {
-            if (isNaN(seconds)) return "0:00";
-            const min = Math.floor(seconds / 60);
-            const sec = Math.floor(seconds % 60);
-            return `${min}:${sec < 10 ? '0' : ''}${sec}`;
-        }
-
-        function seek(e) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const x = e.clientX - rect.left;
-            const percent = x / rect.width;
-            player.currentTime = percent * player.duration;
         }
     </script>
+
+    <!-- Include Upload and Details JS (will be created later) -->
+    <script src="{% static 'music/js/upload.js' %}"></script>
+    <script src="{% static 'music/js/details.js' %}"></script>
+    <script src="{% static 'music/js/player.js' %}"></script>
+
 </body>
 </html>

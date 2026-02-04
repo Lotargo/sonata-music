@@ -1,13 +1,28 @@
 from django.urls import path
 from . import views
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path('', views.index, name='index'),
-    path('upload/', views.upload, name='upload'),
+    path('upload', views.upload, name='upload'), # Note: no trailing slash to match legacy JS if needed, or keeping standard
+    path('process/<int:track_id>', views.process_track, name='process_track'),
+    path('library', views.library_api, name='library_api'),
+    path('delete/<int:track_id>', views.delete_track, name='delete_track'),
+    path('edit/<int:track_id>', views.edit_track, name='edit_track'),
+    path('metrics/<int:track_id>', views.get_track_metrics, name='get_track_metrics'),
+
     path('history/', views.history, name='history'),
     path('likes/', views.likes, name='likes'),
     path('account/', views.account, name='account'),
     path('karaoke/<int:track_id>/', views.karaoke, name='karaoke'),
     path('api/like/<int:track_id>/', views.toggle_like, name='toggle_like'),
     path('api/play/<int:track_id>/', views.record_play, name='record_play'),
+
+    # Custom file serving for processed files (no-cache)
+    path('library_files/<path:filename>', views.serve_processed_file, name='serve_processed_file'),
 ]
+
+# In development, serve media files
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
