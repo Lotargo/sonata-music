@@ -150,14 +150,25 @@ function initComparisonWaveforms(track, data) {
     });
 
     // Load Audio
-    // Original: via uploads serving
-    // Processed: via library_files serving
-    const origUrl = `/uploads/${track.filename}`;
-    const procFilename = track.processed_path.split('/').pop();
-    const procUrl = `/library_files/${procFilename}`;
+    // Use URLs provided by API if available, else construct safer defaults
+    // Note: track.audio_url should be like /media/uploads/file.mp3
+    // track.processed_path is the URL for processed file from library API
 
-    wsOrig.load(origUrl);
-    wsProc.load(procUrl);
+    const origUrl = track.audio_url || `/media/uploads/${track.filename}`;
+    let procUrl = '';
+
+    if (track.processed_path) {
+        // processed_path from API is already a URL
+        procUrl = track.processed_path;
+    } else {
+        // Fallback logic (risky if paths changed)
+        // track.processed_path in DB is 'processed/file.wav', but API returns URL '/media/processed/file.wav'
+        // If API returns null, we can't load it.
+        console.error("No processed path available");
+    }
+
+    if (origUrl) wsOrig.load(origUrl);
+    if (procUrl) wsProc.load(procUrl);
 
     // Sync Logic
     let isSeeking = false;

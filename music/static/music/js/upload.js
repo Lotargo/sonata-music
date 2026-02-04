@@ -56,7 +56,7 @@ async function handleFileSelect(file) {
     formData.append('audio_file', file);
 
     try {
-        const response = await fetch('/upload', {
+        const response = await fetch('/upload/', {
             method: 'POST',
             body: formData,
             headers: {
@@ -357,7 +357,7 @@ async function startProcessing() {
     };
 
     try {
-        const response = await fetch(`/process/${currentUploadTrackId}`, {
+        const response = await fetch(`/process/${currentUploadTrackId}/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
