@@ -1,26 +1,29 @@
 {% extends 'music/base.html' %}
 
+{% block title %}{{ track.title }}{% endblock %}
+
 {% block content %}
-<div class="h-full flex flex-col items-center justify-center p-8 text-center bg-gradient-to-b from-purple-900/50 to-yandex-black">
-    <div class="mb-10">
-        <h1 class="text-4xl font-bold mb-2">{{ track.title }}</h1>
-        <p class="text-xl text-gray-400">{{ track.artist }}</p>
+<section class="karaoke-view">
+    <div class="karaoke-art">
+        {% if track.cover_image %}
+            <img src="{{ track.cover_image.url }}" alt="">
+        {% else %}
+            <i data-lucide="music"></i>
+        {% endif %}
+        <h1>{{ track.title|default:"Без названия" }}</h1>
+        <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
     </div>
 
-    <div class="max-w-3xl w-full h-[60vh] overflow-y-auto custom-scroll text-3xl font-bold leading-relaxed space-y-6 px-4">
+    <div class="lyrics-panel">
         {% if track.lyrics %}
             {{ track.lyrics|linebreaks }}
         {% else %}
-            <div class="flex flex-col items-center justify-center h-full text-gray-500">
-                <span class="text-6xl mb-4">🎤</span>
-                <p>No lyrics available for this track.</p>
+            <div class="empty-state">
+                <i data-lucide="mic-2"></i>
+                <h3>Текста пока нет</h3>
+                <p>Когда lyrics появятся в метаданных трека, они будут отображаться здесь.</p>
             </div>
         {% endif %}
     </div>
-
-    <!-- Playback controls overlay for karaoke mode could be added here -->
-    <button onclick="window.history.back()" class="mt-8 text-gray-400 hover:text-white transition">
-        &larr; Back
-    </button>
-</div>
+</section>
 {% endblock %}

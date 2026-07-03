@@ -1,49 +1,48 @@
 {% extends 'music/base.html' %}
 
+{% block title %}История{% endblock %}
+
 {% block content %}
-<div class="p-8">
-    <h1 class="text-4xl font-bold mb-8">Recently Played</h1>
+<section class="compact-page-head">
+    <div>
+        <p class="eyebrow">Активность</p>
+        <h1>История</h1>
+    </div>
+    <div class="chip-row">
+        <button class="filter-chip is-active">Сегодня</button>
+        <button class="filter-chip">Неделя</button>
+        <button class="filter-chip">Все</button>
+    </div>
+</section>
 
-    <div class="space-y-4">
+<section class="content-section">
+    <div class="track-table">
         {% for track in tracks %}
-        <div class="flex items-center gap-4 p-4 rounded-lg hover:bg-yandex-lightgray transition group">
-            <!-- Cover -->
-            <div class="w-12 h-12 bg-gray-700 rounded overflow-hidden flex-shrink-0 relative">
-                {% if track.cover_image %}
-                    <img src="{{ track.cover_image.url }}" class="w-full h-full object-cover">
-                {% else %}
-                    <div class="w-full h-full flex items-center justify-center text-gray-500 bg-gray-600">
-                        <span>🎵</span>
-                    </div>
-                {% endif %}
-                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
-                    <button onclick="playTrack('{{ track.audio_file.url }}', '{{ track.title|escapejs }}', '{{ track.artist|escapejs }}', '{% if track.cover_image %}{{ track.cover_image.url }}{% endif %}', '{{ track.id }}', '{{ track.is_liked }}')" class="text-white">
-                        ▶
-                    </button>
-                </div>
-            </div>
-
-            <!-- Info -->
-            <div class="flex-1">
-                <div class="font-bold">{{ track.title }}</div>
-                <div class="text-sm text-gray-400">{{ track.artist }}</div>
-            </div>
-
-            <!-- Stats -->
-            <div class="text-sm text-gray-500">
-                Played {{ track.play_count }} times
-            </div>
-
-            <!-- Actions -->
-            <button class="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition">
-                ♥
+        <article class="track-row">
+            <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+                <i data-lucide="play"></i>
             </button>
-        </div>
+            <div class="row-cover">
+                {% if track.cover_image %}
+                    <img src="{{ track.cover_image.url }}" alt="">
+                {% else %}
+                    <i data-lucide="music"></i>
+                {% endif %}
+            </div>
+            <div class="row-main">
+                <h3>{{ track.title|default:"Без названия" }}</h3>
+                <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
+            </div>
+            <span class="row-stat">{{ track.play_count }} прослушиваний</span>
+            <button class="icon-btn small"><i data-lucide="more-horizontal"></i></button>
+        </article>
         {% empty %}
-        <div class="text-center text-gray-500 py-10">
-            No history yet. Start listening!
+        <div class="empty-state">
+            <i data-lucide="history"></i>
+            <h3>История пустая</h3>
+            <p>Запустите трек, и он появится в этом списке.</p>
         </div>
         {% endfor %}
     </div>
-</div>
+</section>
 {% endblock %}

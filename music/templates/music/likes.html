@@ -1,36 +1,59 @@
 {% extends 'music/base.html' %}
 
+{% block title %}Мне нравится{% endblock %}
+
 {% block content %}
-<div class="p-8">
-    <h1 class="text-4xl font-bold mb-8">My Likes</h1>
-
-    <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-        {% for track in tracks %}
-        <div class="group relative bg-yandex-lightgray p-4 rounded-xl hover:bg-[#333] transition cursor-pointer duration-200 ease-in-out">
-            <div class="relative w-full aspect-square bg-gray-800 rounded-lg mb-4 overflow-hidden shadow-lg">
-                {% if track.cover_image %}
-                    <img src="{{ track.cover_image.url }}" class="object-cover w-full h-full group-hover:scale-105 transition duration-500">
-                {% else %}
-                    <div class="w-full h-full flex items-center justify-center text-gray-500 bg-gradient-to-br from-gray-700 to-gray-800">
-                        <span class="text-4xl">🎵</span>
-                    </div>
-                {% endif %}
-
-                <!-- Play Overlay -->
-                <div class="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition backdrop-blur-[1px]">
-                    <button onclick="playTrack('{{ track.audio_file.url }}', '{{ track.title|escapejs }}', '{{ track.artist|escapejs }}', '{% if track.cover_image %}{{ track.cover_image.url }}{% endif %}', '{{ track.id }}', '{{ track.is_liked }}')" class="w-14 h-14 rounded-full bg-yandex-yellow text-black flex items-center justify-center hover:scale-110 transition shadow-xl pl-1">
-                        ▶
-                    </button>
-                </div>
-            </div>
-            <h3 class="font-bold truncate text-lg">{{ track.title }}</h3>
-            <p class="text-sm text-gray-400 truncate">{{ track.artist }}</p>
+<section class="playlist-hero likes-hero">
+    <div class="playlist-cover-large">
+        <i data-lucide="heart"></i>
+    </div>
+    <div class="playlist-copy">
+        <p class="eyebrow">Плейлист</p>
+        <h1>Мне нравится</h1>
+        <p>{{ tracks|length }} треков в избранном</p>
+        <div class="hero-controls">
+            {% if tracks %}
+            <button onclick="playTrack({{ tracks.0.id }})" class="primary-pill"><i data-lucide="play"></i><span>Слушать</span></button>
+            {% endif %}
+            <button class="icon-btn"><i data-lucide="more-horizontal"></i></button>
         </div>
+    </div>
+</section>
+
+<section class="content-section">
+    <div class="chip-row mb-5">
+        <button class="filter-chip is-active">Треки</button>
+        <button class="filter-chip">Исполнители</button>
+        <button class="filter-chip">Альбомы</button>
+    </div>
+
+    <div class="track-table">
+        {% for track in tracks %}
+        <article class="track-row">
+            <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+                <i data-lucide="play"></i>
+            </button>
+            <div class="row-cover">
+                {% if track.cover_image %}
+                    <img src="{{ track.cover_image.url }}" alt="">
+                {% else %}
+                    <i data-lucide="music"></i>
+                {% endif %}
+            </div>
+            <div class="row-main">
+                <h3>{{ track.title|default:"Без названия" }}</h3>
+                <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
+            </div>
+            <span class="status-badge status-{{ track.status }}">{{ track.get_status_display }}</span>
+            <button class="icon-btn small is-liked"><i data-lucide="heart"></i></button>
+        </article>
         {% empty %}
-        <div class="col-span-full py-20 text-center text-gray-500">
-            <p class="text-xl">You haven't liked any tracks yet.</p>
+        <div class="empty-state">
+            <i data-lucide="heart"></i>
+            <h3>Пока ничего не понравилось</h3>
+            <p>Отмечайте треки сердцем, и они появятся здесь.</p>
         </div>
         {% endfor %}
     </div>
-</div>
+</section>
 {% endblock %}

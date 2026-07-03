@@ -49,7 +49,7 @@ if (dropZone && fileInput) {
 
 async function handleFileSelect(file) {
     // Show Loading state
-    dropZone.innerHTML = '<div class="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full mx-auto"></div><p class="mt-4 font-bold">Uploading & Analyzing...</p>';
+    dropZone.innerHTML = '<div class="animate-spin w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full mx-auto"></div><p class="mt-4 font-bold">Загружаю и анализирую...</p>';
     dropZone.classList.add('pointer-events-none');
 
     const formData = new FormData();
@@ -72,16 +72,16 @@ async function handleFileSelect(file) {
             // Robust error handling for non-JSON responses
             try {
                 const err = await response.json();
-                alert('Upload failed: ' + (err.error || 'Unknown error'));
+                alert('Загрузка не удалась: ' + (err.error || 'неизвестная ошибка'));
             } catch (jsonErr) {
                 console.error("Non-JSON error response:", await response.text());
-                alert('Upload failed: Server error (check console)');
+                alert('Загрузка не удалась: ошибка сервера');
             }
             resetUploadUI();
         }
     } catch (e) {
         console.error(e);
-        alert('Upload failed. Check console.');
+        alert('Загрузка не удалась.');
         resetUploadUI();
     }
 }
@@ -93,7 +93,7 @@ function showConfigUI(track) {
 
     // Fill Track Info
     document.getElementById('input-title').value = track.title || '';
-    document.getElementById('input-artist').value = track.artist || 'Unknown Artist';
+    document.getElementById('input-artist').value = track.artist || 'Неизвестный исполнитель';
 
     const coverImg = document.getElementById('upload-cover-preview');
     const coverPlace = document.getElementById('upload-cover-placeholder');
@@ -129,7 +129,7 @@ function resetUpload() {
     const artistInput = document.getElementById('input-artist');
     if (artistInput) artistInput.value = '';
     document.getElementById('start-process-btn').disabled = true;
-    document.getElementById('start-process-btn').innerHTML = 'Start Processing';
+    document.getElementById('start-process-btn').innerHTML = 'Запустить обработку';
 }
 
 function resetUploadUI() {
@@ -137,10 +137,10 @@ function resetUploadUI() {
     dz.classList.remove('hidden', 'pointer-events-none');
     dz.innerHTML = `
         <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition">
-            <i data-lucide="music" class="w-8 h-8 text-indigo-500"></i>
+            <i data-lucide="music" class="w-8 h-8 text-yellow-400"></i>
         </div>
-        <p class="text-xl font-bold mb-2">Drag & drop or click to select</p>
-        <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG (Max 50MB)</p>
+        <p class="text-xl font-bold mb-2">Перетащите файл или выберите вручную</p>
+        <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG до 50MB</p>
         <input type="file" id="file-input" class="hidden" accept="audio/*">
     `;
     document.getElementById('upload-config').classList.add('hidden');
@@ -173,23 +173,23 @@ function setUploadMode(mode) {
     if (mode === 'ai') {
         aiSettings.classList.remove('hidden');
         dspSettings.classList.remove('hidden');
-        dspLabel.textContent = "Pre-Processing DSP Preset (Optional)";
-        modeDesc.innerHTML = `<span class="text-indigo-400 font-bold">Generative AI:</span> Uses AudioSR AI to hallucinate missing high frequencies. Includes DSP pre-processing. Best for low-quality sources.`;
+        dspLabel.textContent = "DSP-подготовка";
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">AI-апскейл:</span> восстанавливает верхние частоты и мягко подготавливает трек DSP-цепочкой.`;
     } else if (mode === 'hybrid') {
         aiSettings.classList.add('hidden');
         dspSettings.classList.remove('hidden');
-        dspLabel.textContent = "Mastering DSP Preset";
-        modeDesc.innerHTML = `<span class="text-indigo-400 font-bold">Hybrid Re-Mix:</span> Separates stems, polishes them individually (DSP), and remixes. Best for complex, distorted tracks.`;
+        dspLabel.textContent = "Mastering DSP";
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Hybrid:</span> разделяет трек на stems, полирует их отдельно и собирает обратно.`;
     } else if (mode === 'restoration') {
         aiSettings.classList.add('hidden');
         dspSettings.classList.add('hidden');
-        modeDesc.innerHTML = `<span class="text-indigo-400 font-bold">Restoration:</span> Fixed 'Suno Enhancer' pipeline. Demucs Re-synthesis -> Soft Bass & Air DSP Polish. No manual settings.`;
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Реставрация:</span> фиксированная цепочка восстановления без ручных настроек.`;
     } else {
         // DSP
         aiSettings.classList.add('hidden');
         dspSettings.classList.remove('hidden');
-        dspLabel.textContent = "DSP Preset";
-        modeDesc.innerHTML = `<span class="text-indigo-400 font-bold">Studio DSP:</span> Professional DSP chain (EQ, Comp, Limiter) without AI generation. Best for good sources.`;
+        dspLabel.textContent = "DSP-пресет";
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Studio DSP:</span> эквалайзер, компрессия и лимитер без AI-генерации.`;
     }
 }
 
@@ -342,7 +342,7 @@ async function startProcessing() {
 
     const btn = document.getElementById('start-process-btn');
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Processing...';
+    btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Обработка...';
     lucide.createIcons();
 
     // Collect Data
@@ -395,12 +395,12 @@ async function startProcessing() {
                 alert('Server Error: ' + response.statusText);
             }
             btn.disabled = false;
-            btn.innerHTML = 'Start Processing';
+            btn.innerHTML = 'Запустить обработку';
         }
     } catch (e) {
         console.error(e);
-        alert('Network Error: ' + e.message);
+        alert('Ошибка сети: ' + e.message);
         btn.disabled = false;
-        btn.innerHTML = 'Start Processing';
+        btn.innerHTML = 'Запустить обработку';
     }
 }

@@ -1,15 +1,12 @@
 {% load static %}
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="ru" class="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Music Platform</title>
+    <title>{% block title %}Music Upscaler{% endblock %}</title>
 
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-
-    <!-- Libraries -->
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
@@ -20,156 +17,147 @@
             theme: {
                 extend: {
                     colors: {
-                        yandex: {
-                            black: '#121212',
-                            yellow: '#fc0',
-                            gray: '#1f1f1f',
-                            lightgray: '#282828',
-                            sidebar: '#181818'
+                        app: {
+                            bg: '#080808',
+                            panel: '#111111',
+                            soft: '#1a1a1a',
+                            line: '#2a2a2a',
+                            text: '#f4f4f4',
+                            muted: '#8c8c8c',
+                            yellow: '#ffd21e',
+                            teal: '#135b56'
                         }
                     },
                     fontFamily: {
-                        sans: ['Inter', 'sans-serif'],
+                        sans: ['Inter', 'Arial', 'sans-serif']
                     }
                 }
             }
         }
     </script>
 </head>
-<body class="bg-yandex-black text-white font-sans h-screen flex overflow-hidden selection:bg-yandex-yellow selection:text-black">
-
-    <!-- Atmospheric Visualization Background -->
-    <div id="bg-visual" class="fixed inset-0 -z-10 bg-gradient-to-b from-gray-900 to-black transition-all duration-1000 ease-in-out">
-        <div id="bg-visual-image" class="absolute inset-0 bg-cover bg-center opacity-30 blur-3xl scale-110 transition-all duration-1000"></div>
-        <div class="absolute inset-0 bg-black/60"></div>
+<body class="h-screen overflow-hidden bg-app-bg text-app-text font-sans selection:bg-app-yellow selection:text-black">
+    <div id="bg-visual" class="fixed inset-0 -z-10 bg-[#080808]">
+        <div id="bg-visual-image" class="absolute inset-0 bg-cover bg-center opacity-20 blur-3xl scale-110 transition-all duration-700"></div>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,rgba(255,210,30,.08),transparent_34%),linear-gradient(180deg,rgba(28,28,28,.7),#080808_58%)]"></div>
     </div>
 
-    <!-- Sidebar -->
-    <aside class="w-64 bg-black/40 backdrop-blur-xl border-r border-white/5 z-40 flex flex-col flex-shrink-0 h-full pb-24">
-        <!-- Logo -->
-        <div class="p-6 flex items-center gap-3">
-             <div class="w-8 h-8 bg-yandex-yellow text-black flex items-center justify-center rounded font-serif font-bold text-xl">Y</div>
-             <span class="text-xl font-bold tracking-tight">Music</span>
-        </div>
-
-        <!-- Navigation -->
-        <nav class="flex-1 px-3 space-y-1 overflow-y-auto">
-            <a href="{% url 'index' %}" class="flex items-center gap-4 py-3 px-4 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition group {% if request.resolver_match.url_name == 'index' %}text-white bg-white/10{% endif %}">
-                <i data-lucide="house" class="w-5 h-5 group-hover:text-yandex-yellow transition-colors"></i>
-                <span class="font-medium">Home</span>
-            </a>
-            <a href="{% url 'history' %}" class="flex items-center gap-4 py-3 px-4 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition group {% if request.resolver_match.url_name == 'history' %}text-white bg-white/10{% endif %}">
-                <i data-lucide="history" class="w-5 h-5 group-hover:text-yandex-yellow transition-colors"></i>
-                <span class="font-medium">History</span>
-            </a>
-            <a href="{% url 'likes' %}" class="flex items-center gap-4 py-3 px-4 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition group {% if request.resolver_match.url_name == 'likes' %}text-white bg-white/10{% endif %}">
-                <i data-lucide="heart" class="w-5 h-5 group-hover:text-red-500 transition-colors"></i>
-                <span class="font-medium">Likes</span>
+    <div class="app-shell">
+        <aside class="app-sidebar">
+            <a href="{% url 'index' %}" class="brand-lockup" aria-label="Music Upscaler">
+                <span class="brand-mark">M</span>
+                <span class="brand-text">Музыка</span>
             </a>
 
-            <div class="pt-6 pb-2 px-4 text-xs font-bold text-gray-500 uppercase tracking-wider">My Music</div>
-            <!-- Add more links here if needed -->
-        </nav>
+            <nav class="sidebar-nav" aria-label="Основная навигация">
+                <a href="{% url 'index' %}" class="sidebar-link {% if request.resolver_match.url_name == 'index' %}is-active{% endif %}">
+                    <i data-lucide="house"></i><span>Главное</span>
+                </a>
+                <a href="{% url 'likes' %}" class="sidebar-link {% if request.resolver_match.url_name == 'likes' %}is-active{% endif %}">
+                    <i data-lucide="heart"></i><span>Мне нравится</span>
+                </a>
+                <a href="{% url 'history' %}" class="sidebar-link {% if request.resolver_match.url_name == 'history' %}is-active{% endif %}">
+                    <i data-lucide="history"></i><span>История</span>
+                </a>
+                <button type="button" onclick="openUploadModal()" class="sidebar-link">
+                    <i data-lucide="upload"></i><span>Загрузить</span>
+                </button>
+            </nav>
 
-        <!-- Profile (Moved to Bottom) -->
-        <div class="p-4 border-t border-white/5 mt-auto">
-            <a href="{% url 'account' %}" class="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 transition group">
-                <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-sm font-bold shadow-lg">
-                    U
+            <div class="sidebar-section">
+                <p class="sidebar-label">Коллекция</p>
+                <div class="playlist-dot"><span></span> Мои треки</div>
+                <div class="playlist-dot"><span></span> Апскейл</div>
+                <div class="playlist-dot"><span></span> Черновики</div>
+            </div>
+
+            <a href="{% url 'account' %}" class="profile-entry {% if request.resolver_match.url_name == 'account' %}is-active{% endif %}">
+                <span class="profile-avatar">U</span>
+                <span class="min-w-0">
+                    <span class="profile-name">User</span>
+                    <span class="profile-plan">Standard</span>
+                </span>
+            </a>
+        </aside>
+
+        <main class="app-main" id="main-content">
+            <header class="topbar">
+                <div class="search-shell">
+                    <i data-lucide="search"></i>
+                    <input type="search" placeholder="Трек, исполнитель, альбом" aria-label="Поиск">
                 </div>
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium text-white truncate group-hover:text-yandex-yellow transition-colors">User Profile</p>
-                    <p class="text-xs text-gray-500 truncate">Account Settings</p>
+                <div class="topbar-actions">
+                    <button type="button" class="icon-btn" title="Настройки"><i data-lucide="settings"></i></button>
+                    <button type="button" onclick="openUploadModal()" class="primary-pill">
+                        <i data-lucide="upload"></i><span>Загрузить трек</span>
+                    </button>
                 </div>
-                <i data-lucide="chevron-right" class="w-4 h-4 text-gray-500"></i>
-            </a>
-        </div>
-    </aside>
+            </header>
 
-    <!-- Main Content -->
-    <main class="flex-1 overflow-y-auto pb-32 relative scroll-smooth" id="main-content">
-        <!-- Top Bar (Optional, for search/upload) -->
-        <header class="sticky top-0 z-30 px-8 py-4 flex justify-between items-center bg-transparent">
-             <div class="flex-1"></div> <!-- Spacer for now -->
-             <button onclick="openUploadModal()" class="bg-yandex-yellow hover:bg-yellow-400 text-black px-5 py-2.5 rounded-full font-bold transition shadow-lg flex items-center gap-2 hover:scale-105 active:scale-95">
-                 <i data-lucide="upload" class="w-4 h-4"></i>
-                 <span>Upload Track</span>
-             </button>
-        </header>
+            <div class="page-frame">
+                {% block content %}{% endblock %}
+            </div>
+        </main>
+    </div>
 
-        {% block content %}{% endblock %}
-    </main>
-
-    <!-- Modals Placeholders -->
     <div id="upload-modal-container">
         {% include 'music/components/upload_modal.html' %}
     </div>
-
     <div id="details-modal-container">
         {% include 'music/components/details_modal.html' %}
     </div>
 
-    <!-- Audio Element -->
     <audio id="audio-player" class="hidden"></audio>
 
-    <!-- Player Bar (Fixed Bottom) -->
-    <!-- We will update this in Step 5, keeping existing structure slightly modified for now or using placeholder -->
-    <div id="player-bar" class="fixed bottom-0 left-0 right-0 bg-[#181818]/95 backdrop-blur-md border-t border-white/5 h-24 px-6 z-50 flex items-center justify-between shadow-2xl transition-transform duration-300 translate-y-0">
-        <!-- Will be fully refactored in Step 5 -->
-        <div class="flex items-center gap-4 w-[30%]">
-             <!-- Placeholder Cover -->
-             <div class="w-14 h-14 bg-gray-800 rounded-md overflow-hidden relative shadow-lg group">
-                  <img id="player-cover" src="" class="w-full h-full object-cover hidden">
-                  <div id="player-cover-placeholder" class="w-full h-full flex items-center justify-center text-gray-600">
-                      <i data-lucide="music" class="w-6 h-6"></i>
-                  </div>
-             </div>
-             <div class="min-w-0">
-                 <h4 id="player-title" class="font-bold text-sm text-white truncate">Select a track</h4>
-                 <p id="player-artist" class="text-xs text-gray-400 truncate">Unknown Artist</p>
-             </div>
-             <button id="like-btn" class="text-gray-500 hover:text-red-500 transition ml-2" onclick="toggleLikeCurrentTrack()">
-                 <i data-lucide="heart" class="w-5 h-5"></i>
-             </button>
+    <div id="player-bar" class="player-bar">
+        <div class="player-now">
+            <div class="player-cover">
+                <img id="player-cover" src="" alt="" class="hidden">
+                <div id="player-cover-placeholder" class="player-cover-placeholder">
+                    <i data-lucide="music"></i>
+                </div>
+            </div>
+            <div class="player-meta">
+                <h4 id="player-title">Выберите трек</h4>
+                <p id="player-artist">Музыка ждёт</p>
+            </div>
+            <button id="like-btn" class="player-icon" onclick="toggleLikeCurrentTrack()" title="Нравится">
+                <i data-lucide="heart"></i>
+            </button>
         </div>
 
-        <div class="flex flex-col items-center max-w-2xl w-[40%]">
-             <div class="flex items-center gap-6 mb-1">
-                 <button id="btn-shuffle" class="text-gray-400 hover:text-white transition"><i data-lucide="shuffle" class="w-4 h-4"></i></button>
-                 <button id="btn-prev" class="text-gray-400 hover:text-white transition"><i data-lucide="skip-back" class="w-5 h-5"></i></button>
-                 <button id="play-pause-btn" onclick="togglePlay()" class="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition shadow-lg">
-                     <i data-lucide="play" class="fill-current w-4 h-4 ml-0.5"></i>
-                 </button>
-                 <button id="btn-next" class="text-gray-400 hover:text-white transition"><i data-lucide="skip-forward" class="w-5 h-5"></i></button>
-                 <button id="btn-repeat" class="text-gray-400 hover:text-white transition"><i data-lucide="repeat" class="w-4 h-4"></i></button>
-             </div>
-             <div class="w-full flex items-center gap-3 text-xs font-mono text-gray-500">
-                 <span id="current-time">0:00</span>
-                 <div class="flex-1 bg-gray-700 h-1 rounded-full relative cursor-pointer group" onclick="seek(event)">
-                     <div id="progress-bar" class="bg-white h-full rounded-full w-0 relative">
-                         <div class="w-3 h-3 bg-white rounded-full absolute right-0 -top-1 opacity-0 group-hover:opacity-100 shadow transition-opacity"></div>
-                     </div>
-                 </div>
-                 <span id="duration">0:00</span>
-             </div>
+        <div class="player-center">
+            <div class="player-controls">
+                <button id="btn-shuffle" class="player-icon" title="Перемешать"><i data-lucide="shuffle"></i></button>
+                <button id="btn-prev" class="player-icon" title="Назад"><i data-lucide="skip-back"></i></button>
+                <button id="play-pause-btn" onclick="togglePlay()" class="player-play" title="Играть">
+                    <i data-lucide="play"></i>
+                </button>
+                <button id="btn-next" class="player-icon" title="Вперёд"><i data-lucide="skip-forward"></i></button>
+                <button id="btn-repeat" class="player-icon" title="Повтор"><i data-lucide="repeat"></i></button>
+            </div>
+            <div class="player-progress">
+                <span id="current-time">0:00</span>
+                <button class="progress-track" onclick="seek(event)" aria-label="Перемотка">
+                    <span id="progress-bar"></span>
+                </button>
+                <span id="duration">0:00</span>
+            </div>
         </div>
 
-        <div class="flex items-center justify-end gap-4 w-[30%]">
-             <a id="karaoke-link" href="#" class="text-gray-400 hover:text-white transition hidden" title="Lyrics">
-                 <i data-lucide="mic-2" class="w-5 h-5"></i>
-             </a>
-             <div class="flex items-center gap-2 group">
-                 <i data-lucide="volume-2" class="w-5 h-5 text-gray-400"></i>
-                 <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" class="w-24 h-1 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-white">
-             </div>
+        <div class="player-extra">
+            <a id="karaoke-link" href="#" class="player-icon hidden" title="Текст"><i data-lucide="mic-2"></i></a>
+            <button class="player-icon" title="Очередь"><i data-lucide="list-music"></i></button>
+            <div class="volume-control">
+                <i data-lucide="volume-2"></i>
+                <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="Громкость">
+            </div>
         </div>
     </div>
 
-    <!-- Scripts -->
     <script>
         lucide.createIcons();
 
-        // CSRF Token Helper
         function getCookie(name) {
             let cookieValue = null;
             if (document.cookie && document.cookie !== '') {
@@ -187,7 +175,6 @@
 
         const csrftoken = getCookie('csrftoken');
 
-        // Background Visualization Logic
         function updateBackground(imageUrl) {
             const bg = document.getElementById('bg-visual-image');
             if (imageUrl && imageUrl !== 'None' && imageUrl !== '') {
@@ -198,10 +185,8 @@
         }
     </script>
 
-    <!-- Include Upload and Details JS -->
-    <script src="{% static 'music/js/upload.js' %}?v=2"></script>
-    <script src="{% static 'music/js/details.js' %}?v=2"></script>
-    <script src="{% static 'music/js/player.js' %}?v=2"></script>
-
+    <script src="{% static 'music/js/upload.js' %}?v=3"></script>
+    <script src="{% static 'music/js/details.js' %}?v=3"></script>
+    <script src="{% static 'music/js/player.js' %}?v=3"></script>
 </body>
 </html>
