@@ -1,7 +1,7 @@
 @import url("modules/variables.css");
 @import url("modules/base.css");
 @import url("modules/layout.css");
-@import url("modules/sidebar.css");
+@import url("modules/sidebar.css?v=5");
 @import url("modules/hero.css");
 @import url("modules/home.css?v=4");
 @import url("modules/buttons.css");

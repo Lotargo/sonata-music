@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=4">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=5">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -66,25 +66,23 @@
                 <a href="{% url 'history' %}" class="sidebar-link {% if request.resolver_match.url_name == 'history' %}is-active{% endif %}">
                     <i data-lucide="history"></i><span>История</span>
                 </a>
-                <button type="button" onclick="openUploadModal()" class="sidebar-link">
-                    <i data-lucide="upload"></i><span>Загрузить</span>
-                </button>
             </nav>
 
-            <div class="sidebar-section">
-                <p class="sidebar-label">Коллекция</p>
-                <div class="playlist-dot"><span></span> Мои треки</div>
-                <div class="playlist-dot"><span></span> Апскейл</div>
-                <div class="playlist-dot"><span></span> Черновики</div>
-            </div>
-
             <a href="{% url 'account' %}" class="profile-entry {% if request.resolver_match.url_name == 'account' %}is-active{% endif %}">
-                <span class="profile-avatar">U</span>
-                <span class="min-w-0">
-                    <span class="profile-name">User</span>
-                    <span class="profile-plan">Standard</span>
+                <span class="profile-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 32 32" role="img" focusable="false">
+                        <path d="M16 4.5 19.2 12l8.1.7-6.1 5.3 1.8 8-7-4.2L9 26l1.8-8-6.1-5.3 8.1-.7L16 4.5Z" />
+                    </svg>
                 </span>
-                <span class="profile-glow"></span>
+                <span class="profile-copy">
+                    <span class="profile-name">{% if request.user.is_authenticated %}{{ request.user.username }}{% else %}User{% endif %}</span>
+                    {% if request.user.profile.is_pro %}
+                    <span class="profile-pro">
+                        <span class="profile-pro-mark" aria-hidden="true"></span>
+                        <span>Pro</span>
+                    </span>
+                    {% endif %}
+                </span>
             </a>
         </aside>
 
