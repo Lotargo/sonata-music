@@ -8,7 +8,17 @@
     display: grid;
     justify-items: center;
     gap: 10px;
-    padding: 72px 20px;
+    padding: 52px 20px;
+}
+
+.track-table-empty {
+    min-height: 320px;
+    align-content: start;
+}
+
+.media-library-empty {
+    padding-top: 28px;
+    padding-bottom: 0;
 }
 
 .empty-state svg,

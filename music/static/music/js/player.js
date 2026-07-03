@@ -22,6 +22,8 @@ const playerCover = document.getElementById('player-cover');
 const playerCoverPlaceholder = document.getElementById('player-cover-placeholder');
 const likeBtn = document.getElementById('like-btn');
 const karaokeLink = document.getElementById('karaoke-link');
+const muteBtn = document.getElementById('mute-btn');
+let lastNonZeroVolume = 1;
 
 // Init
 async function initPlayer() {
@@ -33,6 +35,8 @@ async function initPlayer() {
         audio.volume = parseFloat(savedVol);
         if(volumeSlider) volumeSlider.value = audio.volume;
     }
+    lastNonZeroVolume = audio.volume > 0 ? audio.volume : 1;
+    updateMuteButton();
 }
 
 async function fetchLibrary() {
@@ -183,8 +187,29 @@ window.seek = (e) => {
 // Volume
 if (volumeSlider) {
     volumeSlider.addEventListener('input', (e) => {
-        audio.volume = e.target.value;
-        localStorage.setItem('player_volume', e.target.value);
+        audio.volume = parseFloat(e.target.value);
+        if (audio.volume > 0) {
+            lastNonZeroVolume = audio.volume;
+        }
+        localStorage.setItem('player_volume', audio.volume);
+        updateMuteButton();
+    });
+}
+
+if (muteBtn) {
+    muteBtn.addEventListener('click', () => {
+        if (audio.volume > 0) {
+            lastNonZeroVolume = audio.volume;
+            audio.volume = 0;
+        } else {
+            audio.volume = lastNonZeroVolume || 1;
+        }
+
+        if (volumeSlider) {
+            volumeSlider.value = audio.volume;
+        }
+        localStorage.setItem('player_volume', audio.volume);
+        updateMuteButton();
     });
 }
 
@@ -267,4 +292,17 @@ function updateLikeBtn(isLiked) {
         likeBtn.classList.add('text-gray-500');
         likeBtn.classList.remove('text-red-500', 'fill-current');
     }
+}
+
+function updateMuteButton() {
+    if (!muteBtn) return;
+
+    const isMuted = audio.volume === 0;
+    muteBtn.classList.toggle('is-muted', isMuted);
+    muteBtn.title = isMuted ? 'Включить звук' : 'Выключить звук';
+    muteBtn.setAttribute('aria-label', muteBtn.title);
+    muteBtn.innerHTML = isMuted
+        ? '<i data-lucide="volume-x"></i>'
+        : '<i data-lucide="volume-2"></i>';
+    lucide.createIcons();
 }

@@ -13,24 +13,36 @@
         <p>{{ tracks|length }} треков в избранном</p>
         <div class="hero-controls">
             {% if tracks %}
-            <button onclick="playTrack({{ tracks.0.id }})" class="primary-pill"><i data-lucide="play"></i><span>Слушать</span></button>
+                <button type="button"
+                        onclick="playTrack(Number(this.dataset.trackId))"
+                        data-track-id="{{ tracks.0.id }}"
+                        class="primary-pill">
+                    <i data-lucide="play"></i>
+                    <span>Слушать</span>
+                </button>
             {% endif %}
-            <button class="icon-btn"><i data-lucide="more-horizontal"></i></button>
+            <button type="button" class="icon-btn" aria-label="Дополнительные действия">
+                <i data-lucide="more-horizontal"></i>
+            </button>
         </div>
     </div>
 </section>
 
 <section class="content-section">
     <div class="chip-row mb-5">
-        <button class="filter-chip is-active">Треки</button>
-        <button class="filter-chip">Исполнители</button>
-        <button class="filter-chip">Альбомы</button>
+        <button type="button" class="filter-chip is-active">Треки</button>
+        <button type="button" class="filter-chip">Исполнители</button>
+        <button type="button" class="filter-chip">Альбомы</button>
     </div>
 
     <div class="track-table">
         {% for track in tracks %}
         <article class="track-row">
-            <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+            <button type="button"
+                    onclick="playTrack(Number(this.dataset.trackId))"
+                    class="row-play play-btn"
+                    data-track-id="{{ track.id }}"
+                    aria-label="Играть">
                 <i data-lucide="play"></i>
             </button>
             <div class="row-cover">
@@ -45,7 +57,9 @@
                 <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
             </div>
             <span class="status-badge status-{{ track.status }}">{{ track.get_status_display }}</span>
-            <button class="icon-btn small is-liked"><i data-lucide="heart"></i></button>
+            <button type="button" class="icon-btn small is-liked" aria-label="В избранном">
+                <i data-lucide="heart"></i>
+            </button>
         </article>
         {% empty %}
         <div class="empty-state">

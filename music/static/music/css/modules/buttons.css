@@ -13,13 +13,14 @@
 
 .primary-pill {
     gap: 8px;
-    min-height: 36px;
+    min-height: 38px;
     padding: 0 16px;
     border-radius: 999px;
     background: var(--yellow);
     color: #060606;
     font-size: 13px;
     font-weight: 800;
+    white-space: nowrap;
 }
 
 .primary-pill:hover {
@@ -30,6 +31,11 @@
 .primary-pill svg {
     width: 16px;
     height: 16px;
+}
+
+.empty-state-upload svg {
+    width: 14px;
+    height: 14px;
 }
 
 .icon-btn {

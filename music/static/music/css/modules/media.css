@@ -20,6 +20,8 @@
 @media (max-width: 760px) {
     .app-shell {
         grid-template-columns: 72px minmax(0, 1fr);
+        --sidebar-width: 72px;
+        --page-gutter: 14px;
     }
 
     .app-sidebar {
@@ -48,7 +50,7 @@
     }
 
     .page-frame {
-        padding: 14px 14px 122px;
+        padding: 14px var(--page-gutter) 122px;
     }
 
     .hero-panel,
@@ -72,10 +74,11 @@
     }
 
     .player-bar {
+        left: var(--sidebar-width);
         grid-template-columns: 1fr;
         gap: 8px;
         min-height: 116px;
-        padding: 10px 14px;
+        padding: 10px var(--page-gutter);
     }
 
     .player-now {

@@ -9,4 +9,8 @@
     --muted: #8e8e8e;
     --yellow: #ffd21e;
     --teal: #135b56;
+    --sidebar-width: 228px;
+    --page-gutter: 28px;
+    --topbar-height: 66px;
+    --player-height: 86px;
 }

@@ -149,7 +149,9 @@
             <a id="karaoke-link" href="#" class="player-icon hidden" title="Текст"><i data-lucide="mic-2"></i></a>
             <button class="player-icon" title="Очередь"><i data-lucide="list-music"></i></button>
             <div class="volume-control">
-                <i data-lucide="volume-2"></i>
+                <button id="mute-btn" class="volume-mute" type="button" title="Выключить звук" aria-label="Выключить звук">
+                    <i data-lucide="volume-2"></i>
+                </button>
                 <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="Громкость">
             </div>
         </div>

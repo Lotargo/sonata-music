@@ -2,14 +2,14 @@
     position: fixed;
     right: 0;
     bottom: 0;
-    left: 0;
+    left: var(--sidebar-width);
     z-index: 50;
     display: grid;
-    grid-template-columns: minmax(250px, .9fr) minmax(360px, 1.3fr) minmax(250px, .9fr);
+    grid-template-columns: minmax(260px, .8fr) minmax(420px, 1.4fr) minmax(260px, .8fr);
     align-items: center;
-    gap: 22px;
-    min-height: 86px;
-    padding: 12px 22px;
+    gap: 24px;
+    min-height: var(--player-height);
+    padding: 12px var(--page-gutter);
     border-top: 1px solid rgba(255, 255, 255, .08);
     background: rgba(18, 88, 83, .94);
     backdrop-filter: blur(18px);
@@ -151,13 +151,31 @@
 
 .volume-control {
     gap: 8px;
-    width: 142px;
+    width: 174px;
 }
 
-.volume-control svg {
+.volume-mute {
+    display: inline-grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 auto;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: rgba(255, 255, 255, .62);
+    transition: background .16s ease, color .16s ease;
+}
+
+.volume-mute:hover,
+.volume-mute.is-muted {
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+}
+
+.volume-mute svg {
     width: 18px;
     height: 18px;
-    color: rgba(255, 255, 255, .62);
 }
 
 input[type=range] {

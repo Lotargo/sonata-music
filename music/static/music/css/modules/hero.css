@@ -8,14 +8,26 @@
 .hero-panel {
     display: flex;
     align-items: end;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 20px;
-    min-height: 194px;
-    padding: 42px;
+    min-height: 188px;
+    margin-top: 0;
+    padding: 38px 42px 36px;
+    overflow: hidden;
+    isolation: isolate;
     background:
-        radial-gradient(circle at 82% 18%, rgba(255, 210, 30, .35), transparent 18%),
-        radial-gradient(circle at 70% 42%, rgba(210, 34, 180, .4), transparent 28%),
-        linear-gradient(135deg, #111, #080808 60%);
+        linear-gradient(90deg, rgba(8, 8, 8, .94) 0, rgba(8, 8, 8, .62) 20%, rgba(8, 8, 8, .22) 50%, rgba(8, 8, 8, .68) 82%, rgba(8, 8, 8, .94) 100%),
+        radial-gradient(circle at 85% 25%, rgba(255, 210, 30, .36), transparent 20%),
+        radial-gradient(circle at 72% 48%, rgba(210, 34, 180, .42), transparent 30%),
+        linear-gradient(180deg, rgba(21, 21, 21, .82), rgba(8, 8, 8, .14));
+}
+
+.hero-panel-collection {
+    min-height: 196px;
+    margin-top: -18px;
+    margin-right: calc(var(--page-gutter) * -1);
+    margin-left: calc(var(--page-gutter) * -1);
+    padding: 46px 48px 38px;
 }
 
 .eyebrow {
@@ -30,8 +42,8 @@
 .compact-page-head h1,
 .account-hero h1 {
     margin: 2px 0 8px;
-    font-size: clamp(34px, 5vw, 64px);
-    line-height: .95;
+    font-size: clamp(34px, 4.8vw, 60px);
+    line-height: 1;
     font-weight: 900;
 }
 
@@ -39,10 +51,6 @@
 .playlist-copy p,
 .account-hero p {
     color: #b7b7b7;
-}
-
-.hero-action {
-    flex: 0 0 auto;
 }
 
 .playlist-hero {

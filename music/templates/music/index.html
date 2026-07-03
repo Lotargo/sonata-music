@@ -1,15 +1,12 @@
 {% extends 'music/base.html' %}
 
 {% block content %}
-<section class="hero-panel">
+<section class="hero-panel hero-panel-collection">
     <div>
         <p class="eyebrow">Коллекция</p>
         <h1>Музыка</h1>
         <p class="hero-copy">Личная медиатека, история обработки и быстрый запуск апскейла в одном окне.</p>
     </div>
-    <button onclick="openUploadModal()" class="primary-pill hero-action">
-        <i data-lucide="plus"></i><span>Добавить трек</span>
-    </button>
 </section>
 
 <section class="content-section">
@@ -54,7 +51,7 @@
         <span class="muted-count">{{ tracks|length }} в медиатеке</span>
     </div>
 
-    <div class="track-table">
+    <div class="track-table {% if not tracks %}track-table-empty{% endif %}">
         {% for track in tracks %}
         <article class="track-row group">
             <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
@@ -82,11 +79,11 @@
             </div>
         </article>
         {% empty %}
-        <div class="empty-state">
+        <div class="empty-state media-library-empty">
             <i data-lucide="music-4"></i>
             <h3>Медиатека пустая</h3>
             <p>Добавьте аудиофайл, чтобы запустить обработку и собрать коллекцию.</p>
-            <button onclick="openUploadModal()" class="primary-pill"><i data-lucide="upload"></i><span>Загрузить</span></button>
+            <button onclick="openUploadModal()" class="primary-pill empty-state-upload"><i data-lucide="upload"></i><span>Загрузить</span></button>
         </div>
         {% endfor %}
     </div>
