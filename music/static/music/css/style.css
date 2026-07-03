@@ -3,7 +3,7 @@
 @import url("modules/layout.css");
 @import url("modules/sidebar.css?v=5");
 @import url("modules/hero.css");
-@import url("modules/home.css?v=4");
+@import url("modules/home.css?v=6");
 @import url("modules/buttons.css");
 @import url("modules/cover-grid.css");
 @import url("modules/track-table.css");
@@ -13,4 +13,4 @@
 @import url("modules/account.css");
 @import url("modules/modals.css");
 @import url("modules/overrides.css");
-@import url("modules/media.css");
+@import url("modules/media.css?v=6");

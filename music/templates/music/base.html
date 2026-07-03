@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=5">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=6">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -66,6 +66,9 @@
                 <a href="{% url 'history' %}" class="sidebar-link {% if request.resolver_match.url_name == 'history' %}is-active{% endif %}">
                     <i data-lucide="history"></i><span>История</span>
                 </a>
+                <button type="button" onclick="openUploadModal('restoration')" class="sidebar-link">
+                    <i data-lucide="wand-sparkles"></i><span>Реставрация аудио</span>
+                </button>
             </nav>
 
             <a href="{% url 'account' %}" class="profile-entry {% if request.resolver_match.url_name == 'account' %}is-active{% endif %}">
@@ -94,9 +97,6 @@
                 </div>
                 <div class="topbar-actions">
                     <button type="button" class="icon-btn" title="Настройки"><i data-lucide="settings"></i></button>
-                    <button type="button" onclick="openUploadModal()" class="primary-pill">
-                        <i data-lucide="upload"></i><span>Загрузить трек</span>
-                    </button>
                 </div>
             </header>
 
@@ -200,7 +200,7 @@
         setVisualEnergy(0.18);
     </script>
 
-    <script src="{% static 'music/js/upload.js' %}?v=3"></script>
+    <script src="{% static 'music/js/upload.js' %}?v=4"></script>
     <script src="{% static 'music/js/details.js' %}?v=3"></script>
     <script src="{% static 'music/js/player.js' %}?v=3"></script>
 </body>

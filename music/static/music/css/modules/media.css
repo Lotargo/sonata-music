@@ -7,10 +7,6 @@
         grid-template-columns: 1fr;
     }
 
-    .home-upload-strip {
-        width: 100%;
-    }
-
     .home-library-shell {
         padding: 18px 20px 28px;
     }
@@ -94,15 +90,6 @@
     .spotlight-card {
         align-items: flex-start;
         flex-direction: column;
-    }
-
-    .home-upload-strip {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .home-upload-strip-action {
-        white-space: normal;
     }
 
     .cover-grid {

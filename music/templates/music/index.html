@@ -84,19 +84,6 @@
     </div>
 </section>
 
-{% if not tracks %}
-<section class="home-upload-strip-section">
-    <button type="button" onclick="openUploadModal()" class="home-upload-strip">
-        <span class="home-upload-strip-icon"><i data-lucide="upload-cloud"></i></span>
-        <span class="home-upload-strip-copy">
-            <strong>Добавьте треки в коллекцию</strong>
-            <span>Загрузите файлы и начните собирать библиотеку, историю и избранное.</span>
-        </span>
-        <span class="home-upload-strip-action">Открыть загрузку</span>
-    </button>
-</section>
-{% endif %}
-
 <div class="home-library-shell {% if not tracks %}home-library-shell-empty{% endif %}">
     <section class="content-section home-library-section {% if not tracks %}home-library-section-delayed{% endif %}">
         <div class="section-head home-section-head">

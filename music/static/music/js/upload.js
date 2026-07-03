@@ -1,11 +1,14 @@
 // Global state
 let currentUploadTrackId = null;
+let currentUploadFlow = 'library';
 
 // --- Modal Controls ---
 
-function openUploadModal() {
+function openUploadModal(flow = 'library') {
+    currentUploadFlow = flow;
     const modal = document.getElementById('upload-modal');
     modal.classList.remove('hidden');
+    configureUploadFlow();
     // Trigger reflow for transition
     setTimeout(() => {
         modal.querySelector('div').classList.remove('scale-95', 'opacity-0');
@@ -19,12 +22,43 @@ function closeUploadModal() {
     resetUpload();
 }
 
+function configureUploadFlow() {
+    const title = document.getElementById('upload-modal-title');
+    const libraryOptions = document.getElementById('library-upload-options');
+    const processingModeSection = document.getElementById('processing-mode-section');
+    const aiSettings = document.getElementById('ai-settings');
+    const dspSettings = document.getElementById('dsp-settings');
+    const formatSettings = document.getElementById('format-settings');
+    const startBtn = document.getElementById('start-process-btn');
+
+    const isLibraryFlow = currentUploadFlow === 'library';
+
+    if (title) {
+        title.innerHTML = isLibraryFlow
+            ? '<i data-lucide="upload-cloud" class="text-[var(--yellow)]"></i> Добавить в библиотеку'
+            : '<i data-lucide="wand-sparkles" class="text-[var(--yellow)]"></i> Реставрация аудио';
+    }
+
+    libraryOptions?.classList.toggle('hidden', !isLibraryFlow);
+    processingModeSection?.classList.toggle('hidden', isLibraryFlow);
+    aiSettings?.classList.toggle('hidden', isLibraryFlow);
+    dspSettings?.classList.toggle('hidden', isLibraryFlow);
+    formatSettings?.classList.toggle('hidden', isLibraryFlow);
+
+    if (startBtn) {
+        startBtn.innerHTML = isLibraryFlow ? 'Добавить в библиотеку' : 'Запустить обработку';
+    }
+
+    lucide.createIcons();
+}
+
 // --- Drag & Drop ---
 
-const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
+function bindDropZone() {
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    if (!dropZone || !fileInput) return;
 
-if (dropZone && fileInput) {
     dropZone.onclick = () => fileInput.click();
 
     fileInput.onchange = (e) => {
@@ -47,7 +81,12 @@ if (dropZone && fileInput) {
     };
 }
 
+bindDropZone();
+
 async function handleFileSelect(file) {
+    const dropZone = document.getElementById('drop-zone');
+    if (!dropZone) return;
+
     // Show Loading state
     dropZone.innerHTML = '<div class="animate-spin w-8 h-8 border-4 border-yellow-400 border-t-transparent rounded-full mx-auto"></div><p class="mt-4 font-bold">Загружаю и анализирую...</p>';
     dropZone.classList.add('pointer-events-none');
@@ -108,8 +147,12 @@ function showConfigUI(track) {
     }
 
     // Init Logic
-    setUploadMode('ai'); // Default
-    updateBitrateOptions();
+    if (currentUploadFlow === 'library') {
+        configureUploadFlow();
+    } else {
+        setUploadMode('restoration');
+        updateBitrateOptions();
+    }
 }
 
 function resetUpload() {
@@ -122,6 +165,7 @@ function resetUpload() {
 
     // Reset UI (this re-creates the file input anyway)
     resetUploadUI();
+    configureUploadFlow();
 
     const titleInput = document.getElementById('input-title');
     if (titleInput) titleInput.value = '';
@@ -129,7 +173,7 @@ function resetUpload() {
     const artistInput = document.getElementById('input-artist');
     if (artistInput) artistInput.value = '';
     document.getElementById('start-process-btn').disabled = true;
-    document.getElementById('start-process-btn').innerHTML = 'Запустить обработку';
+    document.getElementById('start-process-btn').innerHTML = currentUploadFlow === 'library' ? 'Добавить в библиотеку' : 'Запустить обработку';
 }
 
 function resetUploadUI() {
@@ -145,6 +189,8 @@ function resetUploadUI() {
     `;
     document.getElementById('upload-config').classList.add('hidden');
     lucide.createIcons();
+    bindDropZone();
+    configureUploadFlow();
 }
 
 // --- Mode Logic ---
@@ -342,14 +388,45 @@ async function startProcessing() {
 
     const btn = document.getElementById('start-process-btn');
     btn.disabled = true;
-    btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Обработка...';
+    btn.innerHTML = currentUploadFlow === 'library'
+        ? '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Добавляю...'
+        : '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Обработка...';
     lucide.createIcons();
 
+    const title = document.getElementById('input-title').value;
+    const artist = document.getElementById('input-artist').value;
+    const enhanceQuality = document.getElementById('library-enhance-quality')?.checked;
+
+    if (currentUploadFlow === 'library' && !enhanceQuality) {
+        try {
+            const response = await fetch(`/edit/${currentUploadTrackId}/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrftoken
+                },
+                body: JSON.stringify({ title, artist })
+            });
+
+            if (!response.ok) throw new Error(response.statusText);
+
+            closeUploadModal();
+            if (typeof fetchLibrary === 'function') fetchLibrary();
+            else window.location.reload();
+        } catch (e) {
+            console.error(e);
+            alert('Не удалось добавить трек в библиотеку: ' + e.message);
+            btn.disabled = false;
+            btn.innerHTML = 'Добавить в библиотеку';
+        }
+        return;
+    }
+
     // Collect Data
-    const payload = {
-        title: document.getElementById('input-title').value,
-        artist: document.getElementById('input-artist').value,
-        mode: document.getElementById('processing-mode').value,
+    let payload = {
+        title,
+        artist,
+        mode: currentUploadFlow === 'library' ? 'dsp' : document.getElementById('processing-mode').value,
         format: document.getElementById('target-format').value,
         sample_rate: document.getElementById('target-sr').value,
         bitrate: document.getElementById('target-bitrate').value,
@@ -368,6 +445,27 @@ async function startProcessing() {
         reverb_size: document.getElementById('reverb-size').value,
         reverb_amount: document.getElementById('reverb-amount').value
     };
+
+    if (currentUploadFlow === 'library') {
+        payload = {
+            title,
+            artist,
+            mode: 'dsp',
+            format: 'mp3',
+            sample_rate: 48000,
+            bitrate: '320k',
+            steps: 50,
+            guidance: 3.5,
+            dsp_preset: 'mastering',
+            stereo_width: 100,
+            bass_boost: 0,
+            voice_clarity: 0,
+            compressor_amount: 50,
+            reverb_enabled: false,
+            reverb_size: 50,
+            reverb_amount: 30
+        };
+    }
 
     try {
         const response = await fetch(`/process/${currentUploadTrackId}/`, {
@@ -395,12 +493,12 @@ async function startProcessing() {
                 alert('Server Error: ' + response.statusText);
             }
             btn.disabled = false;
-            btn.innerHTML = 'Запустить обработку';
+            btn.innerHTML = currentUploadFlow === 'library' ? 'Добавить в библиотеку' : 'Запустить обработку';
         }
     } catch (e) {
         console.error(e);
         alert('Ошибка сети: ' + e.message);
         btn.disabled = false;
-        btn.innerHTML = 'Запустить обработку';
+        btn.innerHTML = currentUploadFlow === 'library' ? 'Добавить в библиотеку' : 'Запустить обработку';
     }
 }
