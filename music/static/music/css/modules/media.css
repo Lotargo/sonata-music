@@ -7,6 +7,10 @@
         grid-template-columns: 1fr;
     }
 
+    .home-upload-strip {
+        width: 100%;
+    }
+
     .home-library-shell {
         padding: 18px 20px 28px;
     }
@@ -56,11 +60,6 @@
         padding-inline: 14px;
     }
 
-    .topbar-actions .primary-pill span,
-    .topbar-actions .icon-btn {
-        display: none;
-    }
-
     .page-frame {
         padding: 14px var(--page-gutter) 122px;
     }
@@ -90,6 +89,15 @@
     .spotlight-card {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .home-upload-strip {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .home-upload-strip-action {
+        white-space: normal;
     }
 
     .cover-grid {

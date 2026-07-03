@@ -29,8 +29,8 @@
     align-items: center;
     gap: 12px;
     flex: 1 1 auto;
-    width: auto;
-    max-width: 720px;
+    width: 100%;
+    max-width: none;
     min-width: 260px;
     height: 38px;
     padding: 0 15px;
@@ -53,15 +53,6 @@
     background: transparent;
     color: #fff;
     font-size: 14px;
-}
-
-.topbar-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-left: auto;
-    min-height: 42px;
-    flex: 0 0 auto;
 }
 
 .page-frame {
