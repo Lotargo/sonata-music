@@ -19,7 +19,7 @@
     <div class="track-table">
         {% for track in tracks %}
         <article class="track-row">
-            <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+            <button onclick="playTrack(Number(this.dataset.trackId))" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
                 <i data-lucide="play"></i>
             </button>
             <div class="row-cover">

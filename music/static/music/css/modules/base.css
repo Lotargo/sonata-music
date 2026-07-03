@@ -7,6 +7,82 @@ body {
     color: var(--text);
 }
 
+.ambient-field {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.ambient-orb,
+.ambient-beam {
+    position: absolute;
+    transform-origin: center;
+    transition: transform .35s ease, opacity .35s ease;
+}
+
+.ambient-orb {
+    border-radius: 50%;
+    filter: blur(64px);
+    opacity: calc(.22 + (var(--visual-energy) * .2));
+}
+
+.ambient-orb-a {
+    top: 10%;
+    left: 50%;
+    width: 32vw;
+    height: 32vw;
+    min-width: 320px;
+    min-height: 320px;
+    background: rgba(255, 215, 0, .18);
+    transform: translate3d(calc(var(--visual-energy) * 14px), calc(var(--visual-energy) * -18px), 0);
+}
+
+.ambient-orb-b {
+    top: 22%;
+    left: 42%;
+    width: 42vw;
+    height: 42vw;
+    min-width: 460px;
+    min-height: 460px;
+    background: rgba(225, 0, 190, .24);
+    transform: translate3d(calc(var(--visual-energy) * -18px), calc(var(--visual-energy) * 16px), 0);
+}
+
+.ambient-orb-c {
+    top: 48%;
+    left: 58%;
+    width: 28vw;
+    height: 28vw;
+    min-width: 280px;
+    min-height: 280px;
+    background: rgba(126, 22, 166, .18);
+    transform: translate3d(calc(var(--visual-energy) * 22px), calc(var(--visual-energy) * 10px), 0);
+}
+
+.ambient-beam {
+    border-radius: 999px;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, .08), transparent);
+    mix-blend-mode: screen;
+    opacity: calc(.08 + (var(--visual-energy) * .18));
+}
+
+.ambient-beam-a {
+    top: 16%;
+    left: 46%;
+    width: 34vw;
+    height: 2px;
+    transform: rotate(46deg) scaleX(calc(.92 + (var(--visual-energy) * .24)));
+}
+
+.ambient-beam-b {
+    top: 54%;
+    left: 52%;
+    width: 30vw;
+    height: 2px;
+    transform: rotate(-34deg) scaleX(calc(.86 + (var(--visual-energy) * .18)));
+}
+
 button,
 input,
 select {

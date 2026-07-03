@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=4">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -36,10 +36,17 @@
         }
     </script>
 </head>
-<body class="h-screen overflow-hidden bg-app-bg text-app-text font-sans selection:bg-app-yellow selection:text-black">
+<body class="page-{{ request.resolver_match.url_name|default:'app' }} h-screen overflow-hidden bg-app-bg text-app-text font-sans selection:bg-app-yellow selection:text-black">
     <div id="bg-visual" class="fixed inset-0 -z-10 bg-[#080808]">
         <div id="bg-visual-image" class="absolute inset-0 bg-cover bg-center opacity-20 blur-3xl scale-110 transition-all duration-700"></div>
-        <div class="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,rgba(255,210,30,.08),transparent_34%),linear-gradient(180deg,rgba(28,28,28,.7),#080808_58%)]"></div>
+        <div class="ambient-field">
+            <div class="ambient-orb ambient-orb-a"></div>
+            <div class="ambient-orb ambient-orb-b"></div>
+            <div class="ambient-orb ambient-orb-c"></div>
+            <div class="ambient-beam ambient-beam-a"></div>
+            <div class="ambient-beam ambient-beam-b"></div>
+        </div>
+        <div class="absolute inset-0 bg-[radial-gradient(circle_at_70%_20%,rgba(255,210,30,.08),transparent_34%),linear-gradient(180deg,rgba(24,24,24,.62),#080808_60%)]"></div>
     </div>
 
     <div class="app-shell">
@@ -77,6 +84,7 @@
                     <span class="profile-name">User</span>
                     <span class="profile-plan">Standard</span>
                 </span>
+                <span class="profile-glow"></span>
             </a>
         </aside>
 
@@ -185,6 +193,13 @@
                 bg.style.backgroundImage = 'none';
             }
         }
+
+        function setVisualEnergy(value) {
+            const energy = Math.max(0, Math.min(1, Number(value) || 0));
+            document.documentElement.style.setProperty('--visual-energy', energy.toFixed(3));
+        }
+
+        setVisualEnergy(0.18);
     </script>
 
     <script src="{% static 'music/js/upload.js' %}?v=3"></script>

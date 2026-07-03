@@ -1,16 +1,17 @@
 :root {
     color-scheme: dark;
-    --bg: #080808;
+    --bg: #060606;
     --panel: #111;
-    --soft: #191919;
-    --soft-2: #222;
+    --soft: #171717;
+    --soft-2: #202020;
     --line: rgba(255, 255, 255, .08);
     --text: #f5f5f5;
     --muted: #8e8e8e;
     --yellow: #ffd21e;
-    --teal: #135b56;
-    --sidebar-width: 228px;
-    --page-gutter: 28px;
+    --teal: #1f615c;
+    --sidebar-width: 246px;
+    --page-gutter: 26px;
     --topbar-height: 66px;
-    --player-height: 86px;
+    --player-height: 92px;
+    --visual-energy: .18;
 }

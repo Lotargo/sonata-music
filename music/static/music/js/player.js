@@ -8,6 +8,11 @@ let currentTrackId = null;
 let isPlaying = false;
 let isShuffle = false;
 let isRepeat = false;
+let audioContext = null;
+let analyser = null;
+let frequencyData = null;
+let mediaSource = null;
+let visualTick = 0;
 
 // Elements
 const audio = document.getElementById('audio-player');
@@ -28,6 +33,7 @@ let lastNonZeroVolume = 1;
 // Init
 async function initPlayer() {
     await fetchLibrary();
+    startVisualizationLoop();
 
     // Restore volume
     const savedVol = localStorage.getItem('player_volume');
@@ -67,6 +73,7 @@ window.playTrack = async (id) => {
 
     currentTrackId = id;
     loadTrack(track);
+    setupAudioAnalysis();
     audio.play();
     setIsPlaying(true);
 
@@ -75,6 +82,26 @@ window.playTrack = async (id) => {
         updateBackground(track.cover_path);
     }
 };
+
+function setupAudioAnalysis() {
+    if (!window.AudioContext && !window.webkitAudioContext) return;
+    if (analyser) {
+        if (audioContext && audioContext.state === 'suspended') {
+            audioContext.resume().catch(() => {});
+        }
+        return;
+    }
+
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    audioContext = new AudioContextClass();
+    analyser = audioContext.createAnalyser();
+    analyser.fftSize = 128;
+    analyser.smoothingTimeConstant = 0.85;
+    frequencyData = new Uint8Array(analyser.frequencyBinCount);
+    mediaSource = audioContext.createMediaElementSource(audio);
+    mediaSource.connect(analyser);
+    analyser.connect(audioContext.destination);
+}
 
 function loadTrack(track) {
     // Determine URL: Processed > Original
@@ -143,6 +170,31 @@ function setIsPlaying(playing) {
     updateListPlayButtons(currentTrackId, playing);
 }
 
+function startVisualizationLoop() {
+    const animate = () => {
+        visualTick += 0.016;
+        let energy = 0.18 + (Math.sin(visualTick * 0.9) * 0.03) + (Math.cos(visualTick * 0.42) * 0.02);
+
+        if (analyser && !audio.paused) {
+            analyser.getByteFrequencyData(frequencyData);
+            let sum = 0;
+            for (let i = 0; i < frequencyData.length; i += 1) {
+                sum += frequencyData[i];
+            }
+            const average = sum / (frequencyData.length * 255);
+            energy = 0.16 + (average * 0.7);
+        }
+
+        if (typeof setVisualEnergy === 'function') {
+            setVisualEnergy(energy);
+        }
+
+        window.requestAnimationFrame(animate);
+    };
+
+    window.requestAnimationFrame(animate);
+}
+
 function updateListPlayButtons(id, playing) {
     // Look for buttons with data-track-id="id"
     const btns = document.querySelectorAll(`.play-btn[data-track-id="${id}"]`);
@@ -172,6 +224,17 @@ audio.addEventListener('ended', () => {
         audio.play();
     } else {
         playNext();
+    }
+});
+
+audio.addEventListener('pause', () => {
+    setIsPlaying(false);
+});
+
+audio.addEventListener('play', () => {
+    setIsPlaying(true);
+    if (audioContext && audioContext.state === 'suspended') {
+        audioContext.resume().catch(() => {});
     }
 });
 

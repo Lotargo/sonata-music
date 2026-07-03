@@ -1,4 +1,5 @@
 .primary-pill,
+.soft-pill,
 .filter-chip,
 .icon-btn,
 .player-icon,
@@ -23,6 +24,12 @@
     white-space: nowrap;
 }
 
+.primary-pill-hero {
+    min-height: 54px;
+    padding: 0 22px;
+    font-size: 16px;
+}
+
 .primary-pill:hover {
     background: #ffe15e;
     transform: translateY(-1px);
@@ -36,6 +43,29 @@
 .empty-state-upload svg {
     width: 14px;
     height: 14px;
+}
+
+.soft-pill {
+    gap: 8px;
+    min-height: 54px;
+    padding: 0 22px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .14);
+    color: #f3f3f3;
+    font-size: 16px;
+    font-weight: 800;
+    white-space: nowrap;
+    backdrop-filter: blur(18px);
+}
+
+.soft-pill:hover {
+    background: rgba(255, 255, 255, .18);
+    transform: translateY(-1px);
+}
+
+.soft-pill svg {
+    width: 17px;
+    height: 17px;
 }
 
 .icon-btn {

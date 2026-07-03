@@ -17,7 +17,23 @@ logger = logging.getLogger(__name__)
 
 def index(request):
     tracks = Track.objects.all().order_by('-created_at')
-    return render(request, 'music/index.html', {'tracks': tracks})
+    featured_track = (
+        Track.objects.filter(cover_image__isnull=False).order_by('-created_at').first()
+        or Track.objects.filter(status='completed').order_by('-created_at').first()
+        or tracks.first()
+    )
+    liked_tracks = list(Track.objects.filter(is_liked=True).order_by('-created_at')[:4])
+    history_tracks = list(Track.objects.filter(play_count__gt=0).order_by('-created_at')[:4])
+
+    context = {
+        'tracks': tracks,
+        'featured_track': featured_track,
+        'liked_tracks': liked_tracks,
+        'history_tracks': history_tracks,
+        'liked_count': Track.objects.filter(is_liked=True).count(),
+        'history_count': Track.objects.filter(play_count__gt=0).count(),
+    }
+    return render(request, 'music/index.html', context)
 
 @require_http_methods(["GET", "POST"])
 def upload(request):
