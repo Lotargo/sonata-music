@@ -1,0 +1,84 @@
+.primary-pill,
+.filter-chip,
+.icon-btn,
+.player-icon,
+.player-play {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    text-decoration: none;
+    transition: transform .16s ease, background .16s ease, color .16s ease, opacity .16s ease;
+}
+
+.primary-pill {
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 16px;
+    border-radius: 999px;
+    background: var(--yellow);
+    color: #060606;
+    font-size: 13px;
+    font-weight: 800;
+}
+
+.primary-pill:hover {
+    background: #ffe15e;
+    transform: translateY(-1px);
+}
+
+.primary-pill svg {
+    width: 16px;
+    height: 16px;
+}
+
+.icon-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .07);
+    color: #bdbdbd;
+}
+
+.icon-btn:hover {
+    background: rgba(255, 255, 255, .12);
+    color: #fff;
+}
+
+.icon-btn.small {
+    width: 30px;
+    height: 30px;
+}
+
+.icon-btn.danger:hover {
+    color: #ff7474;
+    background: rgba(255, 90, 90, .12);
+}
+
+.icon-btn.is-liked,
+.icon-btn.is-liked svg {
+    color: #ff4f78;
+    fill: currentColor;
+}
+
+.icon-btn svg,
+.player-icon svg {
+    width: 18px;
+    height: 18px;
+}
+
+.filter-chip {
+    min-height: 32px;
+    padding: 0 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .08);
+    color: #c9c9c9;
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.filter-chip:hover,
+.filter-chip.is-active {
+    background: #fff;
+    color: #080808;
+}

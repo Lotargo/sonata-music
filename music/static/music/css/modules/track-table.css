@@ -1,0 +1,86 @@
+.track-table {
+    display: grid;
+    gap: 2px;
+}
+
+.track-row {
+    display: grid;
+    grid-template-columns: 34px 46px minmax(0, 1fr) auto auto auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 60px;
+    padding: 7px 10px;
+    border-radius: 8px;
+    color: #d7d7d7;
+}
+
+.track-row:hover {
+    background: rgba(255, 255, 255, .07);
+}
+
+.row-play {
+    width: 30px;
+    height: 30px;
+}
+
+.row-cover {
+    width: 46px;
+    height: 46px;
+    overflow: hidden;
+    border-radius: 6px;
+}
+
+.row-cover svg {
+    width: 20px;
+    height: 20px;
+}
+
+.row-main {
+    min-width: 0;
+}
+
+.row-main h3 {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #fff;
+    font-size: 14px;
+    font-weight: 750;
+}
+
+.row-main p,
+.row-stat {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.status-badge {
+    min-width: 88px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .08);
+    color: #c8c8c8;
+    text-align: center;
+    font-size: 11px;
+    font-weight: 800;
+}
+
+.status-completed {
+    color: #b8ffd6;
+    background: rgba(55, 210, 120, .14);
+}
+
+.status-processing {
+    color: #ffe48c;
+    background: rgba(255, 210, 30, .16);
+}
+
+.status-failed {
+    color: #ffb5b5;
+    background: rgba(255, 80, 80, .14);
+}
+
+.row-actions {
+    display: flex;
+    gap: 4px;
+}

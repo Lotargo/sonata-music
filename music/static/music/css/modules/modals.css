@@ -1,0 +1,20 @@
+#upload-modal > div,
+#details-modal > div {
+    border-radius: 10px !important;
+    background: #151515 !important;
+    border-color: rgba(255, 255, 255, .1) !important;
+}
+
+.upload-dialog-head {
+    background: #151515 !important;
+}
+
+#drop-zone {
+    border-color: rgba(255, 255, 255, .15) !important;
+    background: rgba(255, 255, 255, .04);
+}
+
+#drop-zone:hover {
+    border-color: var(--yellow) !important;
+    background: rgba(255, 210, 30, .06) !important;
+}

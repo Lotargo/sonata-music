@@ -1,0 +1,23 @@
+#start-process-btn,
+#mode-ai.bg-indigo-600,
+#mode-hybrid.bg-indigo-600,
+#mode-restoration.bg-indigo-600,
+#mode-dsp.bg-indigo-600,
+#btn-listen-proc {
+    background: var(--yellow) !important;
+    color: #080808 !important;
+    box-shadow: none !important;
+}
+
+.text-indigo-400,
+.text-indigo-500 {
+    color: var(--yellow) !important;
+}
+
+.focus\:ring-indigo-500:focus {
+    --tw-ring-color: rgba(255, 210, 30, .45) !important;
+}
+
+.text-yandex-yellow {
+    color: var(--yellow) !important;
+}

@@ -1,0 +1,100 @@
+.cover-grid {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(120px, 1fr));
+    gap: 20px;
+}
+
+.cover-card {
+    min-width: 0;
+    cursor: pointer;
+}
+
+.cover-art {
+    position: relative;
+    aspect-ratio: 1;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #1d1d1d;
+    box-shadow: 0 16px 28px rgba(0, 0, 0, .28);
+}
+
+.cover-art img,
+.row-cover img,
+.player-cover img,
+.karaoke-art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.cover-placeholder,
+.row-cover,
+.player-cover-placeholder,
+.empty-tile {
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, #262626, #131313);
+    color: #777;
+}
+
+.cover-placeholder {
+    width: 100%;
+    height: 100%;
+}
+
+.cover-placeholder svg {
+    width: 42px;
+    height: 42px;
+}
+
+.floating-play,
+.row-play {
+    display: grid;
+    place-items: center;
+    border: 0;
+    border-radius: 50%;
+    background: var(--yellow);
+    color: #080808;
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity .18s ease, transform .18s ease;
+}
+
+.floating-play {
+    position: absolute;
+    right: 10px;
+    bottom: 10px;
+    width: 42px;
+    height: 42px;
+    box-shadow: 0 10px 22px rgba(0, 0, 0, .35);
+}
+
+.cover-card:hover .floating-play,
+.track-row:hover .row-play {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.floating-play svg,
+.row-play svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.cover-card h3 {
+    margin-top: 10px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 800;
+}
+
+.cover-card p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--muted);
+    font-size: 13px;
+}

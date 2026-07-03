@@ -1,0 +1,180 @@
+.player-bar {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 50;
+    display: grid;
+    grid-template-columns: minmax(250px, .9fr) minmax(360px, 1.3fr) minmax(250px, .9fr);
+    align-items: center;
+    gap: 22px;
+    min-height: 86px;
+    padding: 12px 22px;
+    border-top: 1px solid rgba(255, 255, 255, .08);
+    background: rgba(18, 88, 83, .94);
+    backdrop-filter: blur(18px);
+    box-shadow: 0 -18px 42px rgba(0, 0, 0, .28);
+}
+
+.player-now,
+.player-extra,
+.player-controls,
+.player-progress,
+.volume-control {
+    display: flex;
+    align-items: center;
+}
+
+.player-now {
+    min-width: 0;
+    gap: 12px;
+}
+
+.player-cover {
+    width: 52px;
+    height: 52px;
+    overflow: hidden;
+    flex: 0 0 auto;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, .24);
+}
+
+.player-cover-placeholder {
+    width: 100%;
+    height: 100%;
+}
+
+.player-cover-placeholder svg {
+    width: 22px;
+    height: 22px;
+}
+
+.player-meta {
+    min-width: 0;
+}
+
+.player-meta h4,
+.player-meta p {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.player-meta h4 {
+    font-size: 13px;
+    font-weight: 850;
+}
+
+.player-meta p {
+    color: rgba(255, 255, 255, .68);
+    font-size: 12px;
+}
+
+.player-center {
+    display: grid;
+    gap: 7px;
+}
+
+.player-controls {
+    justify-content: center;
+    gap: 14px;
+}
+
+.player-icon {
+    background: transparent;
+    color: rgba(255, 255, 255, .62);
+}
+
+.player-icon:hover {
+    background: rgba(255, 255, 255, .1);
+}
+
+.player-play {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: var(--yellow);
+    color: #082622;
+    box-shadow: 0 12px 22px rgba(0, 0, 0, .22);
+}
+
+.player-play:hover {
+    transform: scale(1.04);
+}
+
+.player-play svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.player-progress {
+    gap: 10px;
+    color: rgba(255, 255, 255, .58);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.progress-track {
+    position: relative;
+    width: 100%;
+    height: 18px;
+    border: 0;
+    background: transparent;
+}
+
+.progress-track::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    right: 0;
+    left: 0;
+    height: 3px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .25);
+}
+
+#progress-bar {
+    position: absolute;
+    top: 8px;
+    left: 0;
+    width: 0;
+    height: 3px;
+    border-radius: 999px;
+    background: #fff;
+}
+
+.player-extra {
+    justify-content: end;
+    gap: 10px;
+}
+
+.volume-control {
+    gap: 8px;
+    width: 142px;
+}
+
+.volume-control svg {
+    width: 18px;
+    height: 18px;
+    color: rgba(255, 255, 255, .62);
+}
+
+input[type=range] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 4px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .22);
+    outline: none;
+}
+
+input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(0, 0, 0, .12);
+}

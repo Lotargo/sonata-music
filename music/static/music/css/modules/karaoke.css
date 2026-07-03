@@ -1,0 +1,48 @@
+.karaoke-view {
+    display: grid;
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: 44px;
+    min-height: calc(100vh - 210px);
+    padding: 44px;
+    background: #135b56;
+}
+
+.karaoke-art {
+    align-self: center;
+    text-align: center;
+}
+
+.karaoke-art img,
+.karaoke-art > svg {
+    width: 220px;
+    height: 220px;
+    margin: 0 auto 18px;
+    border-radius: 8px;
+    box-shadow: 0 22px 38px rgba(0, 0, 0, .28);
+}
+
+.karaoke-art > svg {
+    padding: 70px;
+    background: rgba(0, 0, 0, .22);
+}
+
+.karaoke-art h1 {
+    font-size: 20px;
+    font-weight: 850;
+}
+
+.karaoke-art p {
+    color: rgba(255, 255, 255, .72);
+}
+
+.lyrics-panel {
+    align-self: center;
+    max-height: 66vh;
+    overflow-y: auto;
+    padding-right: 24px;
+    color: #fff;
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 850;
+    line-height: 1.6;
+    text-align: center;
+}

@@ -1,0 +1,31 @@
+.empty-state,
+.empty-tile {
+    color: var(--muted);
+    text-align: center;
+}
+
+.empty-state {
+    display: grid;
+    justify-items: center;
+    gap: 10px;
+    padding: 72px 20px;
+}
+
+.empty-state svg,
+.empty-tile svg {
+    width: 42px;
+    height: 42px;
+}
+
+.empty-state h3 {
+    color: #fff;
+    font-size: 20px;
+    font-weight: 850;
+}
+
+.empty-tile {
+    min-height: 210px;
+    border: 1px dashed rgba(255, 255, 255, .16);
+    border-radius: 8px;
+    gap: 10px;
+}
