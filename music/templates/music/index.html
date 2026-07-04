@@ -1,99 +1,101 @@
 {% extends 'music/base.html' %}
 
 {% block content %}
-<section class="home-stage">
-    <div class="home-stage-inner">
-        <div class="stage-copy">
-            <p class="eyebrow">Главная</p>
-            <h1>{% if featured_track %}{{ featured_track.title|default:"Музыкальная коллекция" }}{% else %}Музыкальная коллекция{% endif %}</h1>
-            <p class="hero-copy">
-                {% if featured_track %}
-                    {{ featured_track.artist|default:"Неизвестный исполнитель" }}{% if featured_track.status == 'completed' %} · обработанный трек готов к запуску{% endif %}
-                {% else %}
-                    Загрузите первые треки, чтобы собрать библиотеку, историю обработки и избранное в одном пространстве.
-                {% endif %}
-            </p>
-            <div class="hero-controls">
-                {% if featured_track %}
-                    <button type="button"
-                            onclick="playTrack(Number(this.dataset.trackId))"
-                            data-track-id="{{ featured_track.id }}"
-                            class="primary-pill primary-pill-hero">
-                        <i data-lucide="play"></i>
-                        <span>Слушать</span>
-                    </button>
-                {% endif %}
-                <a href="{% url 'account' %}" class="soft-pill">
-                    <i data-lucide="sliders-horizontal"></i>
-                    <span>Настройки</span>
+<div class="home-hero-zone">
+    <section class="home-stage">
+        <div class="home-stage-inner">
+            <div class="stage-copy">
+                <p class="eyebrow">Главная</p>
+                <h1>{% if featured_track %}{{ featured_track.title|default:"Музыкальная коллекция" }}{% else %}Музыкальная коллекция{% endif %}</h1>
+                <p class="hero-copy">
+                    {% if featured_track %}
+                        {{ featured_track.artist|default:"Неизвестный исполнитель" }}{% if featured_track.status == 'completed' %} · обработанный трек готов к запуску{% endif %}
+                    {% else %}
+                        Загрузите первые треки, чтобы собрать библиотеку, историю обработки и избранное в одном пространстве.
+                    {% endif %}
+                </p>
+                <div class="hero-controls">
+                    {% if featured_track %}
+                        <button type="button"
+                                onclick="playTrack(Number(this.dataset.trackId))"
+                                data-track-id="{{ featured_track.id }}"
+                                class="primary-pill primary-pill-hero">
+                            <i data-lucide="play"></i>
+                            <span>Слушать</span>
+                        </button>
+                    {% endif %}
+                    <a href="{% url 'account' %}" class="soft-pill">
+                        <i data-lucide="sliders-horizontal"></i>
+                        <span>Настройки</span>
+                    </a>
+                </div>
+            </div>
+
+            <div class="stage-footer-cards">
+                <a href="{% url 'likes' %}" class="spotlight-card spotlight-card-wide">
+                    <div class="spotlight-card-main">
+                        <div class="spotlight-icon like-surface">
+                            <i data-lucide="heart"></i>
+                        </div>
+                        <div>
+                            <h3>Мне нравится</h3>
+                            <p>{{ liked_count }} в коллекции</p>
+                        </div>
+                    </div>
+                    <div class="cover-stack" aria-hidden="true">
+                        {% for track in liked_tracks %}
+                            <span class="cover-stack-item">
+                                {% if track.cover_image %}
+                                    <img src="{{ track.cover_image.url }}" alt="">
+                                {% else %}
+                                    <i data-lucide="music"></i>
+                                {% endif %}
+                            </span>
+                        {% empty %}
+                            <span class="cover-stack-item cover-stack-item-empty"><i data-lucide="music"></i></span>
+                        {% endfor %}
+                    </div>
+                </a>
+
+                <a href="{% url 'history' %}" class="spotlight-card">
+                    <div class="spotlight-card-main">
+                        <div class="spotlight-icon history-surface">
+                            <i data-lucide="history"></i>
+                        </div>
+                        <div>
+                            <h3>История</h3>
+                            <p>
+                                {% if history_tracks %}
+                                    {{ history_tracks.0.artist|default:"Недавние прослушивания" }}
+                                {% else %}
+                                    Пока без прослушиваний
+                                {% endif %}
+                            </p>
+                        </div>
+                    </div>
+                    <div class="spotlight-cover" aria-hidden="true">
+                        {% if history_tracks and history_tracks.0.cover_image %}
+                            <img src="{{ history_tracks.0.cover_image.url }}" alt="">
+                        {% else %}
+                            <i data-lucide="disc-3"></i>
+                        {% endif %}
+                    </div>
                 </a>
             </div>
         </div>
+    </section>
 
-        <div class="stage-footer-cards">
-            <a href="{% url 'likes' %}" class="spotlight-card spotlight-card-wide">
-                <div class="spotlight-card-main">
-                    <div class="spotlight-icon like-surface">
-                        <i data-lucide="heart"></i>
-                    </div>
-                    <div>
-                        <h3>Мне нравится</h3>
-                        <p>{{ liked_count }} в коллекции</p>
-                    </div>
-                </div>
-                <div class="cover-stack" aria-hidden="true">
-                    {% for track in liked_tracks %}
-                        <span class="cover-stack-item">
-                            {% if track.cover_image %}
-                                <img src="{{ track.cover_image.url }}" alt="">
-                            {% else %}
-                                <i data-lucide="music"></i>
-                            {% endif %}
-                        </span>
-                    {% empty %}
-                        <span class="cover-stack-item cover-stack-item-empty"><i data-lucide="music"></i></span>
-                    {% endfor %}
-                </div>
-            </a>
-
-            <a href="{% url 'history' %}" class="spotlight-card">
-                <div class="spotlight-card-main">
-                    <div class="spotlight-icon history-surface">
-                        <i data-lucide="history"></i>
-                    </div>
-                    <div>
-                        <h3>История</h3>
-                        <p>
-                            {% if history_tracks %}
-                                {{ history_tracks.0.artist|default:"Недавние прослушивания" }}
-                            {% else %}
-                                Пока без прослушиваний
-                            {% endif %}
-                        </p>
-                    </div>
-                </div>
-                <div class="spotlight-cover" aria-hidden="true">
-                    {% if history_tracks and history_tracks.0.cover_image %}
-                        <img src="{{ history_tracks.0.cover_image.url }}" alt="">
-                    {% else %}
-                        <i data-lucide="disc-3"></i>
-                    {% endif %}
-                </div>
-            </a>
-        </div>
-    </div>
-</section>
-
-<section class="home-upload-strip-section">
-    <button type="button" onclick="openUploadModal()" class="home-upload-strip">
-        <span class="home-upload-strip-icon"><i data-lucide="upload-cloud"></i></span>
-        <span class="home-upload-strip-copy">
-            <strong>Добавьте треки в коллекцию</strong>
-            <span>Загрузите файлы и начните собирать библиотеку, историю и избранное.</span>
-        </span>
-        <span class="home-upload-strip-action">Открыть загрузку</span>
-    </button>
-</section>
+    <section class="home-upload-strip-section">
+        <button type="button" onclick="openUploadModal()" class="home-upload-strip">
+            <span class="home-upload-strip-icon"><i data-lucide="upload-cloud"></i></span>
+            <span class="home-upload-strip-copy">
+                <strong>Добавьте треки в коллекцию</strong>
+                <span>Загрузите файлы и начните собирать библиотеку, историю и избранное.</span>
+            </span>
+            <span class="home-upload-strip-action">Открыть загрузку</span>
+        </button>
+    </section>
+</div>
 
 <div class="home-library-shell {% if not tracks %}home-library-shell-empty{% endif %}">
     <section class="content-section home-library-section {% if not tracks %}home-library-section-delayed{% endif %}">

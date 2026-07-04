@@ -1,3 +1,11 @@
+.home-hero-zone {
+    --home-stage-height: 640px;
+    --home-upload-strip-height: 86px;
+    display: grid;
+    grid-template-rows: auto minmax(var(--home-upload-strip-height), 1fr);
+    min-height: calc(100dvh - var(--topbar-height) - var(--player-height) - 18px);
+}
+
 .home-stage {
     position: relative;
     margin-top: -6px;
@@ -12,7 +20,7 @@
 .home-stage-inner {
     position: relative;
     display: grid;
-    min-height: 640px;
+    min-height: var(--home-stage-height);
     padding: 34px 28px 42px;
     border: 1px solid rgba(255, 255, 255, .06);
     border-radius: 24px;
@@ -88,8 +96,9 @@
 
 .home-upload-strip-section {
     display: flex;
+    align-self: center;
     justify-content: center;
-    margin-top: 30px;
+    margin: 0;
 }
 
 .home-upload-strip {

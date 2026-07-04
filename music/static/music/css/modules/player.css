@@ -9,11 +9,15 @@
     align-items: center;
     gap: 24px;
     min-height: var(--player-height);
-    padding: 10px var(--page-gutter);
-    border-top: 1px solid rgba(255, 255, 255, .07);
-    background: rgba(27, 97, 92, .9);
-    backdrop-filter: blur(22px);
-    box-shadow: 0 -18px 42px rgba(0, 0, 0, .34);
+    padding: 14px var(--page-gutter) 16px;
+    border-top: 1px solid rgba(255, 255, 255, .1);
+    background:
+        linear-gradient(110deg, rgba(255, 51, 0, .42), rgba(204, 0, 0, .34)),
+        rgba(18, 10, 10, .72);
+    backdrop-filter: blur(28px) saturate(140%);
+    box-shadow:
+        0 -18px 42px rgba(0, 0, 0, .38),
+        inset 0 1px 0 rgba(255, 255, 255, .1);
 }
 
 .player-now,
