@@ -59,41 +59,43 @@ startProcessing = async function() {
     const enhanceQuality = document.getElementById('library-enhance-quality')?.checked;
     const shouldProcess = !isLibraryFlow || enhanceQuality;
 
+    if (shouldProcess) {
+        const result = originalStartProcessing();
+        if (isLibraryFlow && btn) {
+            btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Обработка...';
+            lucide.createIcons();
+        }
+        return result;
+    }
+
     btn.disabled = true;
-    btn.innerHTML = isLibraryFlow && !shouldProcess
-        ? '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Добавляю файл...'
-        : '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Обработка...';
+    btn.innerHTML = '<i data-lucide="loader-2" class="animate-spin w-5 h-5"></i> Добавляю файл...';
     lucide.createIcons();
 
     const title = document.getElementById('input-title').value;
     const artist = document.getElementById('input-artist').value;
 
-    if (!shouldProcess) {
-        try {
-            const response = await fetch(`/edit/${currentUploadTrackId}/`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRFToken': csrftoken
-                },
-                body: JSON.stringify({ title, artist })
-            });
+    try {
+        const response = await fetch(`/edit/${currentUploadTrackId}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({ title, artist })
+        });
 
-            if (!response.ok) throw new Error(response.statusText);
+        if (!response.ok) throw new Error(response.statusText);
 
-            closeUploadModal();
-            if (typeof fetchLibrary === 'function') fetchLibrary();
-            else window.location.reload();
-        } catch (e) {
-            console.error(e);
-            alert('Не удалось добавить файл: ' + e.message);
-            btn.disabled = false;
-            btn.innerHTML = 'Добавить файл';
-        }
-        return;
+        closeUploadModal();
+        if (typeof fetchLibrary === 'function') fetchLibrary();
+        else window.location.reload();
+    } catch (e) {
+        console.error(e);
+        alert('Не удалось добавить файл: ' + e.message);
+        btn.disabled = false;
+        btn.innerHTML = 'Добавить файл';
     }
-
-    originalStartProcessing();
 };
 
 configureUploadFlow();
