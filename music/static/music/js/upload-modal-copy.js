@@ -3,6 +3,35 @@ function getLibraryFileActionLabel() {
     return enhanceQuality ? 'Запустить обработку' : 'Добавить файл';
 }
 
+let uploadModalCommitted = true;
+let uploadModalCloseInProgress = false;
+
+async function refreshLibraryAfterUploadChange() {
+    if (typeof fetchLibrary === 'function') {
+        try {
+            await fetchLibrary({ render: true });
+        } catch (_) {
+            await fetchLibrary();
+        }
+    }
+}
+
+async function discardUncommittedUpload(trackId) {
+    if (!trackId) return;
+    try {
+        const response = await fetch(`/cancel-upload/${trackId}/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrftoken }
+        });
+        if (!response.ok && response.status !== 404 && response.status !== 409) {
+            console.warn('Pending upload cleanup failed:', response.statusText);
+        }
+        await refreshLibraryAfterUploadChange();
+    } catch (e) {
+        console.warn('Pending upload cleanup failed:', e);
+    }
+}
+
 const UPLOAD_FORMAT_OPTIONS = {
     mp3: {
         label: 'Bitrate',
@@ -154,12 +183,29 @@ configureUploadFlow = function() {
 
 const originalOpenUploadModal = openUploadModal;
 openUploadModal = function(flow = 'library') {
+    uploadModalCommitted = true;
     originalOpenUploadModal(flow);
     bindUploadFormatControls();
 };
 
+const originalCloseUploadModal = closeUploadModal;
+closeUploadModal = async function(options = {}) {
+    if (uploadModalCloseInProgress) return;
+
+    const discardPending = options?.discardPending !== false;
+    const pendingTrackId = currentUploadTrackId;
+    const shouldDiscard = discardPending && pendingTrackId && !uploadModalCommitted;
+
+    uploadModalCloseInProgress = true;
+    if (shouldDiscard) await discardUncommittedUpload(pendingTrackId);
+    uploadModalCommitted = true;
+    originalCloseUploadModal();
+    uploadModalCloseInProgress = false;
+};
+
 const originalShowConfigUI = showConfigUI;
 showConfigUI = function(track) {
+    uploadModalCommitted = false;
     const result = originalShowConfigUI(track);
     bindUploadFormatControls();
     return result;
@@ -180,7 +226,15 @@ const originalStartProcessing = startProcessing;
 startProcessing = async function() {
     if (!currentUploadTrackId) return;
     ensureUploadBitrateOptions();
-    return originalStartProcessing();
+    uploadModalCommitted = true;
+    const result = await originalStartProcessing();
+
+    const modal = document.getElementById('upload-modal');
+    if (modal && !modal.classList.contains('hidden')) {
+        uploadModalCommitted = false;
+    }
+
+    return result;
 };
 
 bindUploadFormatControls();
