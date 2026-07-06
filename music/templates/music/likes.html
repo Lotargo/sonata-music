@@ -53,7 +53,7 @@
                 {% endif %}
             </div>
             <div class="row-main">
-                <h3>{{ track.title|default:"Без названия" }}</h3>
+                <h3 title="{{ track.display_title }}">{{ track.display_title|default:"Без названия" }}</h3>
                 <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
             </div>
             <span class="status-badge status-{{ track.status }}">{{ track.get_status_display }}</span>
