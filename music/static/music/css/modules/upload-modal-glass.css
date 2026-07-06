@@ -301,3 +301,51 @@
         flex-basis: 38px;
     }
 }
+
+#upload-modal .upload-dialog {
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#upload-modal .upload-dialog::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+}
+
+#upload-modal .upload-dialog-head {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 30 !important;
+    isolation: isolate;
+    background:
+        linear-gradient(135deg, rgba(255, 51, 0, .16), rgba(204, 0, 0, .08)),
+        rgba(16, 12, 12, .92) !important;
+    backdrop-filter: blur(22px) saturate(1.08);
+}
+
+#upload-modal .upload-dialog-head::after {
+    content: "";
+    position: absolute;
+    left: -8px;
+    right: -8px;
+    bottom: -18px;
+    height: 18px;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(8, 8, 8, .58), transparent);
+    z-index: -1;
+}
+
+#upload-modal select,
+#upload-modal select:focus {
+    background-color: rgba(45, 39, 39, .96) !important;
+    color: #fff !important;
+    color-scheme: dark !important;
+}
+
+#upload-modal select option,
+#upload-modal select optgroup {
+    background-color: #171313 !important;
+    color: #f5f5f5 !important;
+}
