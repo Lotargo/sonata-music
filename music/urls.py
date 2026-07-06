@@ -8,6 +8,7 @@ urlpatterns = [
     path('upload/', views.upload, name='upload'),
     path('process/<int:track_id>/', views.process_track, name='process_track'),
     path('library/', views.library_api, name='library_api'),
+    path('cancel-upload/<int:track_id>/', views.cancel_pending_upload, name='cancel_pending_upload'),
     path('delete/<int:track_id>/', views.delete_track, name='delete_track'),
     path('edit/<int:track_id>/', views.edit_track, name='edit_track'),
     path('metrics/<int:track_id>/', views.get_track_metrics, name='get_track_metrics'),
