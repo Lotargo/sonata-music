@@ -1,20 +1,299 @@
-#upload-modal > div,
-#details-modal > div {
-    border-radius: 10px !important;
-    background: #151515 !important;
-    border-color: rgba(255, 255, 255, .1) !important;
+#upload-modal,
+#details-modal,
+.auth-modal {
+    background: rgba(0, 0, 0, .68) !important;
+    backdrop-filter: blur(24px) saturate(1.08);
 }
 
-.upload-dialog-head {
-    background: #151515 !important;
+#upload-modal > div,
+#details-modal > div,
+.auth-dialog {
+    position: relative;
+    border: 1px solid rgba(255, 255, 255, .11) !important;
+    border-radius: 14px !important;
+    background:
+        linear-gradient(180deg, rgba(26, 26, 26, .94), rgba(9, 9, 9, .96)),
+        rgba(14, 14, 14, .92) !important;
+    box-shadow:
+        0 30px 90px rgba(0, 0, 0, .64),
+        inset 0 1px 0 rgba(255, 255, 255, .08) !important;
+}
+
+#upload-modal > div::before,
+#details-modal > div::before,
+.auth-dialog::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255, 210, 30, .7), transparent);
+    pointer-events: none;
+}
+
+.upload-dialog-head,
+#details-modal > div > div:first-child {
+    background: rgba(15, 15, 15, .86) !important;
+    backdrop-filter: blur(18px);
+}
+
+#details-modal > div > div:first-child {
+    border-color: rgba(255, 255, 255, .08) !important;
 }
 
 #drop-zone {
-    border-color: rgba(255, 255, 255, .15) !important;
-    background: rgba(255, 255, 255, .04);
+    border-color: rgba(255, 255, 255, .16) !important;
+    background: rgba(255, 255, 255, .045);
 }
 
 #drop-zone:hover {
     border-color: var(--yellow) !important;
-    background: rgba(255, 210, 30, .06) !important;
+    background: rgba(255, 210, 30, .075) !important;
+}
+
+#drop-zone > div,
+#upload-cover-placeholder {
+    background: rgba(255, 255, 255, .07) !important;
+}
+
+#upload-config > div,
+#library-upload-options,
+#mode-desc,
+#dsp-advanced,
+#details-modal [class*="bg-slate-800"] {
+    border-color: rgba(255, 255, 255, .08) !important;
+    background: rgba(255, 255, 255, .055) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045);
+}
+
+#processing-mode-section .grid,
+#details-modal [class*="bg-slate-900"] {
+    border-color: rgba(255, 255, 255, .08) !important;
+    background: rgba(255, 255, 255, .045) !important;
+}
+
+#processing-mode-section button {
+    min-height: 58px;
+}
+
+#processing-mode-section button svg {
+    width: 16px;
+    height: 16px;
+}
+
+#upload-modal input[type="text"],
+#upload-modal input[type="number"],
+#upload-modal select,
+.auth-field input {
+    border-color: rgba(255, 255, 255, .1) !important;
+    background: rgba(255, 255, 255, .055) !important;
+    color: var(--text) !important;
+}
+
+#upload-modal input[type="text"]:focus,
+#upload-modal input[type="number"]:focus,
+#upload-modal select:focus,
+.auth-field input:focus {
+    border-color: rgba(255, 210, 30, .62) !important;
+    box-shadow: 0 0 0 3px rgba(255, 210, 30, .12);
+}
+
+#upload-modal input[type="range"] {
+    accent-color: var(--yellow);
+}
+
+#upload-modal input[type="checkbox"],
+.auth-dialog input[type="checkbox"] {
+    accent-color: var(--yellow);
+}
+
+#start-process-btn {
+    border: 1px solid rgba(255, 210, 30, .22);
+}
+
+#start-process-btn:disabled {
+    border-color: rgba(255, 255, 255, .08);
+    background: rgba(255, 255, 255, .1) !important;
+    color: rgba(255, 255, 255, .55) !important;
+}
+
+#details-modal table thead,
+#details-modal tbody tr:hover {
+    background: rgba(255, 255, 255, .055) !important;
+}
+
+#details-modal th,
+#details-modal td {
+    border-color: rgba(255, 255, 255, .06) !important;
+}
+
+#btn-listen-orig,
+#btn-listen-proc,
+#view-split,
+#view-overlay {
+    border-color: rgba(255, 255, 255, .08) !important;
+}
+
+#btn-listen-orig,
+#view-split,
+#view-overlay {
+    background: rgba(255, 255, 255, .075) !important;
+    color: rgba(255, 255, 255, .72) !important;
+}
+
+#btn-listen-orig.bg-blue-600 {
+    background: var(--teal) !important;
+    color: #fff !important;
+}
+
+#view-split.bg-slate-700,
+#view-overlay.bg-slate-700 {
+    background: var(--yellow) !important;
+    color: #080808 !important;
+}
+
+.auth-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 70;
+    display: grid;
+    place-items: center;
+    padding: 18px;
+}
+
+.auth-modal.hidden {
+    display: none;
+}
+
+.auth-dialog {
+    display: grid;
+    gap: 20px;
+    width: min(440px, 100%);
+    padding: 22px;
+    border: 1px solid rgba(255, 255, 255, .1);
+    border-radius: 14px;
+}
+
+.auth-dialog-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+}
+
+.auth-dialog-head h2 {
+    color: #fff;
+    font-size: 24px;
+    font-weight: 850;
+}
+
+.auth-icon-button {
+    display: inline-grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .06);
+    color: rgba(255, 255, 255, .72);
+}
+
+.auth-icon-button:hover {
+    background: rgba(255, 255, 255, .1);
+    color: #fff;
+}
+
+.auth-icon-button svg,
+.auth-submit svg {
+    width: 18px;
+    height: 18px;
+}
+
+.auth-dialog form,
+.auth-field {
+    display: grid;
+    gap: 12px;
+}
+
+.auth-field span {
+    color: rgba(255, 255, 255, .72);
+    font-size: 13px;
+    font-weight: 780;
+}
+
+.auth-field input {
+    width: 100%;
+    min-height: 44px;
+    padding: 0 14px;
+    border: 1px solid rgba(255, 255, 255, .08);
+    border-radius: 8px;
+    outline: 0;
+    background: rgba(255, 255, 255, .05);
+    color: #fff;
+}
+
+.auth-note {
+    color: rgba(255, 255, 255, .54);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.auth-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.auth-state {
+    color: rgba(255, 255, 255, .6);
+    font-size: 12px;
+    font-weight: 800;
+}
+
+.auth-state[data-mode="error"] {
+    color: #ff9a9a;
+}
+
+.auth-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 15px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--yellow);
+    color: #080808;
+    font-weight: 850;
+}
+
+.auth-submit:disabled {
+    cursor: wait;
+    opacity: .65;
+}
+
+@media (max-width: 720px) {
+    #upload-modal > div,
+    #details-modal > div {
+        max-height: 94vh !important;
+        padding: 18px !important;
+    }
+
+    .upload-dialog-head,
+    #details-modal > div > div:first-child {
+        margin: -18px -18px 18px !important;
+        padding: 18px !important;
+    }
+
+    #processing-mode-section .grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    }
+
+    #format-settings {
+        grid-template-columns: 1fr !important;
+    }
+
+    #details-modal > div > div:last-child {
+        padding: 18px !important;
+    }
 }

@@ -10,7 +10,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=15">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=21">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -65,19 +65,21 @@
             </nav>
 
             <a href="{% url 'account' %}" class="profile-entry {% if request.resolver_match.url_name == 'account' %}is-active{% endif %}">
-                <span class="profile-avatar" aria-hidden="true">
-                    <svg viewBox="0 0 32 32" role="img" focusable="false">
-                        <path d="M16 4.5 19.2 12l8.1.7-6.1 5.3 1.8 8-7-4.2L9 26l1.8-8-6.1-5.3 8.1-.7L16 4.5Z" />
-                    </svg>
+                <span class="profile-avatar" aria-hidden="true" data-sidebar-avatar>
+                    {% if account_profile.avatar_url %}
+                        <img src="{{ account_profile.avatar_url }}" alt="">
+                    {% else %}
+                        <span class="profile-avatar-initial">
+                            {{ account_profile.avatar_initial }}
+                        </span>
+                    {% endif %}
                 </span>
                 <span class="profile-copy">
-                    <span class="profile-name">{% if request.user.is_authenticated %}{{ request.user.username }}{% else %}User{% endif %}</span>
-                    {% if request.user.profile.is_pro %}
-                    <span class="profile-pro">
+                    <span class="profile-name" data-sidebar-name>{{ account_profile.public_name }}</span>
+                    <span class="profile-pro {% if not account_profile.is_pro %}is-hidden{% endif %}" data-sidebar-pro>
                         <span class="profile-pro-mark" aria-hidden="true"></span>
                         <span>Pro</span>
                     </span>
-                    {% endif %}
                 </span>
             </a>
         </aside>
@@ -102,56 +104,61 @@
     <div id="details-modal-container">
         {% include 'music/components/details_modal.html' %}
     </div>
+    <div id="register-modal-container">
+        {% include 'music/components/register_modal.html' %}
+    </div>
 
-    <audio id="audio-player" class="hidden"></audio>
+    {% if request.resolver_match.url_name == 'index' %}
+        <audio id="audio-player" class="hidden"></audio>
 
-    <div id="player-bar" class="player-bar">
-        <div class="player-now">
-            <div class="player-cover">
-                <img id="player-cover" src="" alt="" class="hidden">
-                <div id="player-cover-placeholder" class="player-cover-placeholder">
-                    <i data-lucide="music"></i>
+        <div id="player-bar" class="player-bar">
+            <div class="player-now">
+                <div class="player-cover">
+                    <img id="player-cover" src="" alt="" class="hidden">
+                    <div id="player-cover-placeholder" class="player-cover-placeholder">
+                        <i data-lucide="music"></i>
+                    </div>
+                </div>
+                <div class="player-meta">
+                    <h4 id="player-title">Выберите трек</h4>
+                    <p id="player-artist">Музыка ждёт</p>
+                </div>
+                <button id="like-btn" class="player-icon" onclick="toggleLikeCurrentTrack()" title="Нравится">
+                    <i data-lucide="heart"></i>
+                </button>
+            </div>
+
+            <div class="player-center">
+                <div class="player-controls">
+                    <button id="btn-shuffle" class="player-icon" title="Перемешать"><i data-lucide="shuffle"></i></button>
+                    <button id="btn-prev" class="player-icon" title="Назад"><i data-lucide="skip-back"></i></button>
+                    <button id="play-pause-btn" onclick="togglePlay()" class="player-play" title="Играть">
+                        <i data-lucide="play"></i>
+                    </button>
+                    <button id="btn-next" class="player-icon" title="Вперёд"><i data-lucide="skip-forward"></i></button>
+                    <button id="btn-repeat" class="player-icon" title="Повтор"><i data-lucide="repeat"></i></button>
+                </div>
+                <div class="player-progress">
+                    <span id="current-time">0:00</span>
+                    <button class="progress-track" onclick="seek(event)" aria-label="Перемотка">
+                        <span id="progress-bar"></span>
+                    </button>
+                    <span id="duration">0:00</span>
                 </div>
             </div>
-            <div class="player-meta">
-                <h4 id="player-title">Выберите трек</h4>
-                <p id="player-artist">Музыка ждёт</p>
-            </div>
-            <button id="like-btn" class="player-icon" onclick="toggleLikeCurrentTrack()" title="Нравится">
-                <i data-lucide="heart"></i>
-            </button>
-        </div>
 
-        <div class="player-center">
-            <div class="player-controls">
-                <button id="btn-shuffle" class="player-icon" title="Перемешать"><i data-lucide="shuffle"></i></button>
-                <button id="btn-prev" class="player-icon" title="Назад"><i data-lucide="skip-back"></i></button>
-                <button id="play-pause-btn" onclick="togglePlay()" class="player-play" title="Играть">
-                    <i data-lucide="play"></i>
-                </button>
-                <button id="btn-next" class="player-icon" title="Вперёд"><i data-lucide="skip-forward"></i></button>
-                <button id="btn-repeat" class="player-icon" title="Повтор"><i data-lucide="repeat"></i></button>
-            </div>
-            <div class="player-progress">
-                <span id="current-time">0:00</span>
-                <button class="progress-track" onclick="seek(event)" aria-label="Перемотка">
-                    <span id="progress-bar"></span>
-                </button>
-                <span id="duration">0:00</span>
+            <div class="player-extra">
+                <a id="karaoke-link" href="#" class="player-icon hidden" title="Текст"><i data-lucide="mic-2"></i></a>
+                <button class="player-icon" title="Очередь"><i data-lucide="list-music"></i></button>
+                <div class="volume-control">
+                    <button id="mute-btn" class="volume-mute" type="button" title="Выключить звук" aria-label="Выключить звук">
+                        <i data-lucide="volume-2"></i>
+                    </button>
+                    <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="Громкость">
+                </div>
             </div>
         </div>
-
-        <div class="player-extra">
-            <a id="karaoke-link" href="#" class="player-icon hidden" title="Текст"><i data-lucide="mic-2"></i></a>
-            <button class="player-icon" title="Очередь"><i data-lucide="list-music"></i></button>
-            <div class="volume-control">
-                <button id="mute-btn" class="volume-mute" type="button" title="Выключить звук" aria-label="Выключить звук">
-                    <i data-lucide="volume-2"></i>
-                </button>
-                <input type="range" id="volume-slider" min="0" max="1" step="0.05" value="1" aria-label="Громкость">
-            </div>
-        </div>
-    </div>
+    {% endif %}
 
     <script>
         lucide.createIcons();
@@ -188,10 +195,19 @@
         }
 
         setVisualEnergy(0.18);
+
+        if (!window.playTrack) {
+            window.playTrack = () => {
+                window.location.href = "{% url 'index' %}";
+            };
+        }
     </script>
 
-    <script src="{% static 'music/js/upload.js' %}?v=4"></script>
+    <script src="{% static 'music/js/upload.js' %}?v=6"></script>
     <script src="{% static 'music/js/details.js' %}?v=3"></script>
-    <script src="{% static 'music/js/player.js' %}?v=3"></script>
+    <script src="{% static 'music/js/auth.js' %}?v=1"></script>
+    {% if request.resolver_match.url_name == 'index' %}
+        <script src="{% static 'music/js/player.js' %}?v=3"></script>
+    {% endif %}
 </body>
 </html>

@@ -59,7 +59,11 @@
     flex: 1;
     min-height: 0;
     overflow-y: auto;
-    padding: 18px var(--page-gutter) calc(var(--player-height) + 34px);
+    padding: 18px var(--page-gutter) 34px;
+}
+
+.page-index .page-frame {
+    padding-bottom: calc(var(--player-height) + 34px);
 }
 
 .content-section {

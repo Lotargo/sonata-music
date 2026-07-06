@@ -1,0 +1,36 @@
+<div id="register-modal" class="auth-modal hidden" aria-hidden="true">
+    <div class="auth-dialog" role="dialog" aria-modal="true" aria-labelledby="register-modal-title">
+        <div class="auth-dialog-head">
+            <div>
+                <p class="eyebrow">Локальный мок</p>
+                <h2 id="register-modal-title">Регистрация</h2>
+            </div>
+            <button type="button" class="auth-icon-button" onclick="closeRegisterModal()" aria-label="Закрыть">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+
+        <form data-register-form>
+            {% csrf_token %}
+            <label class="auth-field">
+                <span>Отображаемое имя</span>
+                <input type="text" name="display_name" value="{{ account_profile.display_name }}" placeholder="User" autocomplete="name">
+            </label>
+
+            <label class="auth-field">
+                <span>Электронная почта</span>
+                <input type="email" name="email" value="{{ account_profile.email }}" placeholder="example@gmail.com" autocomplete="email">
+            </label>
+
+            <p class="auth-note">Пока создаём локальный аккаунт без пароля и подтверждения. Гостевые настройки переносятся в профиль.</p>
+
+            <div class="auth-actions">
+                <span class="auth-state" data-register-state></span>
+                <button type="submit" class="auth-submit">
+                    <i data-lucide="user-plus"></i>
+                    <span>Создать аккаунт</span>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>

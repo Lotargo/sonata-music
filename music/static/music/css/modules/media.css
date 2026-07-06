@@ -62,7 +62,11 @@
     }
 
     .page-frame {
-        padding: 14px var(--page-gutter) calc(var(--player-height) + 14px);
+        padding: 14px var(--page-gutter) 24px;
+    }
+
+    .page-index .page-frame {
+        padding-bottom: calc(var(--player-height) + 14px);
     }
 
     .hero-panel,

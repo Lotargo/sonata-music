@@ -8,6 +8,7 @@ function openUploadModal(flow = 'library') {
     currentUploadFlow = flow;
     const modal = document.getElementById('upload-modal');
     modal.classList.remove('hidden');
+    setUploadMode(flow === 'library' ? 'dsp' : 'restoration');
     configureUploadFlow();
     // Trigger reflow for transition
     setTimeout(() => {
@@ -32,6 +33,8 @@ function configureUploadFlow() {
     const startBtn = document.getElementById('start-process-btn');
 
     const isLibraryFlow = currentUploadFlow === 'library';
+    const enhanceQuality = !isLibraryFlow || document.getElementById('library-enhance-quality')?.checked;
+    const selectedMode = document.getElementById('processing-mode')?.value || (isLibraryFlow ? 'dsp' : 'restoration');
 
     if (title) {
         title.innerHTML = isLibraryFlow
@@ -40,16 +43,29 @@ function configureUploadFlow() {
     }
 
     libraryOptions?.classList.toggle('hidden', !isLibraryFlow);
-    processingModeSection?.classList.toggle('hidden', isLibraryFlow);
-    aiSettings?.classList.toggle('hidden', isLibraryFlow);
-    dspSettings?.classList.toggle('hidden', isLibraryFlow);
-    formatSettings?.classList.toggle('hidden', isLibraryFlow);
+    processingModeSection?.classList.toggle('hidden', !enhanceQuality);
+    formatSettings?.classList.toggle('hidden', !enhanceQuality);
+
+    if (enhanceQuality) {
+        aiSettings?.classList.toggle('hidden', selectedMode !== 'ai');
+        dspSettings?.classList.toggle('hidden', selectedMode === 'restoration');
+    } else {
+        aiSettings?.classList.add('hidden');
+        dspSettings?.classList.add('hidden');
+    }
 
     if (startBtn) {
-        startBtn.innerHTML = isLibraryFlow ? 'Добавить в библиотеку' : 'Запустить обработку';
+        startBtn.innerHTML = isLibraryFlow && !enhanceQuality ? 'Добавить в библиотеку' : 'Запустить обработку';
     }
 
     lucide.createIcons();
+}
+
+function updateLibraryEnhanceUI() {
+    if (currentUploadFlow === 'library' && document.getElementById('library-enhance-quality')?.checked) {
+        setUploadMode('dsp');
+    }
+    configureUploadFlow();
 }
 
 // --- Drag & Drop ---
@@ -148,6 +164,9 @@ function showConfigUI(track) {
 
     // Init Logic
     if (currentUploadFlow === 'library') {
+        if (document.getElementById('library-enhance-quality')?.checked) {
+            setUploadMode('dsp');
+        }
         configureUploadFlow();
     } else {
         setUploadMode('restoration');
@@ -172,6 +191,9 @@ function resetUpload() {
 
     const artistInput = document.getElementById('input-artist');
     if (artistInput) artistInput.value = '';
+    const enhanceInput = document.getElementById('library-enhance-quality');
+    if (enhanceInput) enhanceInput.checked = false;
+    setUploadMode(currentUploadFlow === 'library' ? 'dsp' : 'restoration');
     document.getElementById('start-process-btn').disabled = true;
     document.getElementById('start-process-btn').innerHTML = currentUploadFlow === 'library' ? 'Добавить в библиотеку' : 'Запустить обработку';
 }
@@ -201,12 +223,13 @@ function setUploadMode(mode) {
     // Update Buttons
     ['ai', 'hybrid', 'restoration', 'dsp'].forEach(m => {
         const btn = document.getElementById(`mode-${m}`);
+        if (!btn) return;
         if (m === mode) {
-            btn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm');
-            btn.classList.remove('text-slate-400');
+            btn.classList.add('bg-indigo-600', 'text-white', 'shadow-sm', 'font-bold');
+            btn.classList.remove('text-slate-400', 'font-medium');
         } else {
-            btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm');
-            btn.classList.add('text-slate-400');
+            btn.classList.remove('bg-indigo-600', 'text-white', 'shadow-sm', 'font-bold');
+            btn.classList.add('text-slate-400', 'font-medium');
         }
     });
 
@@ -236,6 +259,10 @@ function setUploadMode(mode) {
         dspSettings.classList.remove('hidden');
         dspLabel.textContent = "DSP-пресет";
         modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Studio DSP:</span> эквалайзер, компрессия и лимитер без AI-генерации.`;
+    }
+
+    if (currentUploadFlow === 'library' && !document.getElementById('library-enhance-quality')?.checked) {
+        configureUploadFlow();
     }
 }
 
@@ -336,6 +363,11 @@ if(revEnabled) {
     revEnabled.onchange = toggleReverbControls;
 }
 
+const libraryEnhance = document.getElementById('library-enhance-quality');
+if (libraryEnhance) {
+    libraryEnhance.onchange = updateLibraryEnhanceUI;
+}
+
 function toggleReverbControls() {
     const ctrls = document.getElementById('reverb-controls');
     if (document.getElementById('reverb-enabled').checked) {
@@ -357,8 +389,12 @@ function updateBitrateOptions() {
         const opts = [
             {v: '128k', t: '128 kbps'},
             {v: '192k', t: '192 kbps'},
+            {v: '256k', t: '256 kbps'},
             {v: '320k', t: '320 kbps (High)'}
         ];
+        if (format === 'ogg') {
+            opts.push({v: '500k', t: '500 kbps (Max)'});
+        }
         opts.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.v; opt.text = o.t;
@@ -396,8 +432,9 @@ async function startProcessing() {
     const title = document.getElementById('input-title').value;
     const artist = document.getElementById('input-artist').value;
     const enhanceQuality = document.getElementById('library-enhance-quality')?.checked;
+    const shouldProcess = currentUploadFlow !== 'library' || enhanceQuality;
 
-    if (currentUploadFlow === 'library' && !enhanceQuality) {
+    if (!shouldProcess) {
         try {
             const response = await fetch(`/edit/${currentUploadTrackId}/`, {
                 method: 'PATCH',
@@ -422,50 +459,37 @@ async function startProcessing() {
         return;
     }
 
+    const percentToRatio = (id, fallback = 0) => {
+        const value = Number(document.getElementById(id)?.value ?? fallback);
+        return Number.isFinite(value) ? value / 100 : fallback / 100;
+    };
+
     // Collect Data
-    let payload = {
+    const payload = {
         title,
         artist,
-        mode: currentUploadFlow === 'library' ? 'dsp' : document.getElementById('processing-mode').value,
+        mode: document.getElementById('processing-mode').value,
         format: document.getElementById('target-format').value,
         sample_rate: document.getElementById('target-sr').value,
         bitrate: document.getElementById('target-bitrate').value,
 
         // AI
+        quality_preset: document.getElementById('quality-preset').value,
         steps: document.getElementById('ddim-steps').value,
         guidance: document.getElementById('guidance-scale').value,
+        seed: document.getElementById('ai-seed').value,
+        batch_size: document.getElementById('ai-batch-size').value,
 
         // DSP
         dsp_preset: document.getElementById('dsp-preset').value,
-        stereo_width: document.getElementById('stereo-width').value,
+        stereo_width: percentToRatio('stereo-width', 100),
         bass_boost: document.getElementById('bass-boost').value,
         voice_clarity: document.getElementById('voice-clarity').value,
-        compressor_amount: document.getElementById('compressor-amount').value,
+        compressor_amount: percentToRatio('compressor-amount', 50),
         reverb_enabled: document.getElementById('reverb-enabled').checked,
-        reverb_size: document.getElementById('reverb-size').value,
-        reverb_amount: document.getElementById('reverb-amount').value
+        reverb_size: percentToRatio('reverb-size', 50),
+        reverb_amount: percentToRatio('reverb-amount', 30)
     };
-
-    if (currentUploadFlow === 'library') {
-        payload = {
-            title,
-            artist,
-            mode: 'dsp',
-            format: 'mp3',
-            sample_rate: 48000,
-            bitrate: '320k',
-            steps: 50,
-            guidance: 3.5,
-            dsp_preset: 'mastering',
-            stereo_width: 100,
-            bass_boost: 0,
-            voice_clarity: 0,
-            compressor_amount: 50,
-            reverb_enabled: false,
-            reverb_size: 50,
-            reverb_amount: 30
-        };
-    }
 
     try {
         const response = await fetch(`/process/${currentUploadTrackId}/`, {
