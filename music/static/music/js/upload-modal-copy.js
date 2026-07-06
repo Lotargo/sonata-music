@@ -3,6 +3,38 @@ function getLibraryFileActionLabel() {
     return enhanceQuality ? 'Запустить обработку' : 'Добавить файл';
 }
 
+function isBitrateValueAllowedForFormat(format, value) {
+    if (!value) return false;
+    if (format === 'mp3') return ['128k', '192k', '256k', '320k'].includes(value);
+    if (format === 'ogg') return ['128k', '192k', '256k', '320k', '500k'].includes(value);
+    return ['16-bit', '24-bit', '32-bit'].includes(value);
+}
+
+function getDefaultBitrateValueForFormat(format) {
+    return (format === 'mp3' || format === 'ogg') ? '320k' : '24-bit';
+}
+
+function ensureUploadBitrateOptions(force = false) {
+    const formatSelect = document.getElementById('target-format');
+    const bitrateSelect = document.getElementById('target-bitrate');
+    if (!formatSelect || !bitrateSelect) return;
+
+    const format = formatSelect.value || 'mp3';
+    const previousValue = bitrateSelect.value;
+    const hasOptions = bitrateSelect.options.length > 0;
+    const hasValidValue = isBitrateValueAllowedForFormat(format, previousValue);
+
+    if (force || !hasOptions || !hasValidValue) {
+        updateBitrateOptions();
+    }
+
+    if (!isBitrateValueAllowedForFormat(format, bitrateSelect.value)) {
+        const fallback = getDefaultBitrateValueForFormat(format);
+        const fallbackExists = Array.from(bitrateSelect.options).some(option => option.value === fallback);
+        if (fallbackExists) bitrateSelect.value = fallback;
+    }
+}
+
 configureUploadFlow = function() {
     const title = document.getElementById('upload-modal-title');
     const libraryOptions = document.getElementById('library-upload-options');
@@ -29,6 +61,7 @@ configureUploadFlow = function() {
     if (enhanceQuality) {
         aiSettings?.classList.toggle('hidden', selectedMode !== 'ai');
         dspSettings?.classList.toggle('hidden', selectedMode === 'restoration');
+        ensureUploadBitrateOptions();
     } else {
         aiSettings?.classList.add('hidden');
         dspSettings?.classList.add('hidden');
@@ -41,9 +74,31 @@ configureUploadFlow = function() {
     lucide.createIcons();
 };
 
+const originalOpenUploadModal = openUploadModal;
+openUploadModal = function(flow = 'library') {
+    originalOpenUploadModal(flow);
+    ensureUploadBitrateOptions(true);
+};
+
+const originalShowConfigUI = showConfigUI;
+showConfigUI = function(track) {
+    const result = originalShowConfigUI(track);
+    ensureUploadBitrateOptions();
+    return result;
+};
+
 const originalResetUpload = resetUpload;
 resetUpload = function() {
     originalResetUpload();
+
+    const formatSelect = document.getElementById('target-format');
+    if (formatSelect) formatSelect.value = 'mp3';
+
+    const sampleRateSelect = document.getElementById('target-sr');
+    if (sampleRateSelect) sampleRateSelect.value = '48000';
+
+    ensureUploadBitrateOptions(true);
+
     const startBtn = document.getElementById('start-process-btn');
     if (startBtn && currentUploadFlow === 'library') {
         startBtn.innerHTML = 'Добавить файл';
@@ -53,6 +108,8 @@ resetUpload = function() {
 const originalStartProcessing = startProcessing;
 startProcessing = async function() {
     if (!currentUploadTrackId) return;
+
+    ensureUploadBitrateOptions();
 
     const btn = document.getElementById('start-process-btn');
     const isLibraryFlow = currentUploadFlow === 'library';
@@ -98,4 +155,5 @@ startProcessing = async function() {
     }
 };
 
+ensureUploadBitrateOptions(true);
 configureUploadFlow();
