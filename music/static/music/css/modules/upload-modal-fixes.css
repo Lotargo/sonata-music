@@ -1,0 +1,85 @@
+/* Final upload modal fixes: scrollbar, sticky close header, native select contrast. */
+#upload-modal {
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+#upload-modal::-webkit-scrollbar,
+#upload-modal .upload-dialog::-webkit-scrollbar {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+}
+
+#upload-modal .upload-dialog {
+    overscroll-behavior: contain;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none !important;
+}
+
+#upload-modal .upload-dialog-head {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 60 !important;
+    isolation: isolate;
+    background:
+        linear-gradient(135deg, rgba(255, 51, 0, .18), rgba(204, 0, 0, .08)),
+        rgba(16, 12, 12, .94) !important;
+    backdrop-filter: blur(22px) saturate(1.08) !important;
+    -webkit-backdrop-filter: blur(22px) saturate(1.08) !important;
+}
+
+#upload-modal .upload-dialog-head::after {
+    content: "";
+    position: absolute;
+    left: -10px;
+    right: -10px;
+    bottom: -20px;
+    height: 20px;
+    pointer-events: none;
+    background: linear-gradient(180deg, rgba(8, 8, 8, .62), transparent);
+    z-index: -1;
+}
+
+#upload-modal .upload-dialog-head > button {
+    position: relative;
+    z-index: 2;
+}
+
+#upload-modal select,
+#upload-modal select:focus,
+#upload-modal select:active {
+    background-color: rgba(38, 32, 32, .98) !important;
+    color: #fff !important;
+    color-scheme: dark !important;
+}
+
+#upload-modal select option,
+#upload-modal select optgroup {
+    background-color: #171313 !important;
+    color: #f5f5f5 !important;
+}
+
+#upload-modal select option:checked,
+#upload-modal select option:hover {
+    background-color: #361b16 !important;
+    color: #fff !important;
+}
+
+#target-bitrate:empty {
+    background:
+        linear-gradient(135deg, rgba(255, 51, 0, .08), rgba(255, 255, 255, .035)),
+        rgba(38, 32, 32, .98) !important;
+}
+
+@media (max-width: 720px) {
+    #upload-modal {
+        overflow-y: auto !important;
+    }
+
+    #upload-modal .upload-dialog-head {
+        top: 0 !important;
+    }
+}
