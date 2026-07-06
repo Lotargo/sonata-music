@@ -1,20 +1,20 @@
 <div id="details-modal" class="fixed inset-0 z-[60] hidden flex items-center justify-center p-4 bg-black/80 backdrop-blur-md transition-opacity duration-300">
-    <div class="bg-[#1e293b] w-full max-w-6xl rounded-2xl border border-white/10 shadow-2xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+    <div class="details-dialog bg-[#1e293b] w-full max-w-6xl rounded-2xl border border-white/10 shadow-2xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         <!-- Header -->
-        <div class="p-6 border-b border-white/10 flex justify-between items-center bg-[#0f172a]/50">
+        <div class="details-dialog-head p-6 border-b border-white/10 flex justify-between items-center bg-[#0f172a]/50">
             <div>
                 <h2 id="details-title" class="text-2xl font-bold">Track Details</h2>
                 <p id="details-subtitle" class="text-sm text-slate-400">Analysis and Comparison</p>
             </div>
-            <button onclick="closeDetailsModal()" class="text-slate-400 hover:text-white p-2 hover:bg-white/10 rounded-full transition"><i data-lucide="x" class="w-6 h-6"></i></button>
+            <button onclick="closeDetailsModal()" class="details-close text-slate-400 hover:text-white p-2 hover:bg-white/10 rounded-full transition"><i data-lucide="x" class="w-6 h-6"></i></button>
         </div>
 
         <!-- Content -->
-        <div class="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="details-body flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
 
             <!-- Metrics Column -->
             <div class="space-y-6">
-                <div class="bg-slate-800/50 rounded-xl p-6 border border-white/5">
+                <div class="details-card bg-slate-800/50 rounded-xl p-6 border border-white/5">
                     <h3 class="text-lg font-semibold mb-4 flex items-center gap-2"><i data-lucide="bar-chart-2" class="text-indigo-400"></i> Audio Metrics</h3>
                     <div class="overflow-x-auto">
                         <table class="w-full text-sm text-left">
@@ -33,9 +33,25 @@
                     </div>
                 </div>
 
-                <div class="bg-slate-800/50 rounded-xl p-6 border border-white/5">
+                <div class="details-card bg-slate-800/50 rounded-xl p-6 border border-white/5">
                     <h3 class="text-lg font-semibold mb-4 flex items-center gap-2"><i data-lucide="info" class="text-indigo-400"></i> File Info</h3>
-                    <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div class="details-info-grid grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Original File</p>
+                            <p id="info-file-orig" class="details-info-value font-mono text-slate-200 text-sm">-</p>
+                        </div>
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Processed File</p>
+                            <p id="info-file-proc" class="details-info-value font-mono text-indigo-300 font-bold text-sm">-</p>
+                        </div>
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Original Format</p>
+                            <p id="info-format-orig" class="font-mono text-slate-200 text-lg">-</p>
+                        </div>
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Processed Format</p>
+                            <p id="info-format-proc" class="font-mono text-indigo-300 font-bold text-lg">-</p>
+                        </div>
                         <div>
                             <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Original Sample Rate</p>
                             <p id="info-sr-orig" class="font-mono text-slate-200 text-lg">-</p>
@@ -44,16 +60,24 @@
                             <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Processed Sample Rate</p>
                             <p id="info-sr-proc" class="font-mono text-indigo-300 font-bold text-lg">-</p>
                         </div>
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Original Duration</p>
+                            <p id="info-duration-orig" class="font-mono text-slate-200 text-lg">-</p>
+                        </div>
+                        <div>
+                            <p class="text-slate-400 text-xs uppercase tracking-wider mb-1">Processed Duration</p>
+                            <p id="info-duration-proc" class="font-mono text-indigo-300 font-bold text-lg">-</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
             <!-- Visual Comparison Column -->
             <div class="flex flex-col space-y-6">
-                <div class="bg-slate-800/50 rounded-xl p-6 border border-white/5 flex-1 flex flex-col">
-                    <div class="flex justify-between items-center mb-4">
+                <div class="details-card waveform-card bg-slate-800/50 rounded-xl p-6 border border-white/5 flex-1 flex flex-col">
+                    <div class="flex justify-between items-center mb-4 gap-4">
                         <h3 class="text-lg font-semibold flex items-center gap-2"><i data-lucide="activity" class="text-indigo-400"></i> Waveform Comparison</h3>
-                        <div class="flex bg-slate-900 rounded-lg p-1 text-xs">
+                        <div class="details-toggle flex bg-slate-900 rounded-lg p-1 text-xs">
                             <button id="view-split" onclick="setVisualMode('split')" class="px-3 py-1.5 rounded-md bg-slate-700 text-white shadow font-medium transition">Split</button>
                             <button id="view-overlay" onclick="setVisualMode('overlay')" class="px-3 py-1.5 rounded-md text-slate-400 hover:text-white transition">Overlay</button>
                         </div>
@@ -61,31 +85,25 @@
 
                     <!-- Waveform Container -->
                     <div id="compare-container" class="relative w-full h-64 bg-slate-900/50 rounded-lg border border-white/5 overflow-hidden mb-6 group">
+                        <div id="wave-loading" class="absolute inset-0 z-20 flex items-center justify-center bg-black/20 text-xs font-bold tracking-wider uppercase text-slate-400 pointer-events-none">Loading waveforms...</div>
                         <!-- Original Waveform -->
                         <div id="wave-orig-wrapper" class="w-full h-full absolute top-0 left-0 transition-all duration-300 border-b border-white/5">
                             <div id="wave-orig" class="w-full h-full"></div>
-                            <div class="absolute top-2 left-2 text-[10px] font-bold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded pointer-events-none border border-blue-500/20">ORIGINAL</div>
+                            <div class="wave-tag wave-tag-original absolute top-2 left-2 text-[10px] font-bold bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded pointer-events-none border border-blue-500/20">ORIGINAL</div>
                         </div>
                         <!-- Processed Waveform -->
                         <div id="wave-proc-wrapper" class="w-full h-full absolute top-0 left-0 transition-all duration-300 opacity-100">
                             <div id="wave-proc" class="w-full h-full"></div>
-                            <div class="absolute bottom-2 right-2 text-[10px] font-bold bg-green-500/20 text-green-300 px-2 py-0.5 rounded pointer-events-none border border-green-500/20">PROCESSED</div>
+                            <div class="wave-tag wave-tag-processed absolute bottom-2 right-2 text-[10px] font-bold bg-green-500/20 text-green-300 px-2 py-0.5 rounded pointer-events-none border border-green-500/20">PROCESSED</div>
                         </div>
-
-                        <!-- Center Play Button -->
-                         <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-                             <div class="w-16 h-16 bg-white/10 backdrop-blur-sm rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition duration-300">
-                                 <i data-lucide="play" class="w-6 h-6 fill-white text-white"></i>
-                             </div>
-                         </div>
                     </div>
 
                     <!-- Controls -->
                     <div class="grid grid-cols-2 gap-4 mt-auto">
-                        <button id="btn-listen-orig" onclick="setCompareAudio('orig')" class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm font-medium border border-white/5">
+                        <button id="btn-listen-orig" onclick="setCompareAudio('orig')" class="compare-source-btn flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm font-medium border border-white/5">
                             <i data-lucide="headphones" class="w-4 h-4"></i> Listen Original
                         </button>
-                        <button id="btn-listen-proc" onclick="setCompareAudio('proc')" class="flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white transition text-sm font-medium shadow-lg shadow-indigo-500/20">
+                        <button id="btn-listen-proc" onclick="setCompareAudio('proc')" class="compare-source-btn flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-slate-700 hover:bg-slate-600 transition text-sm font-medium border border-white/5">
                             <i data-lucide="sparkles" class="w-4 h-4"></i> Listen Result
                         </button>
                     </div>
