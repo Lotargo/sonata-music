@@ -30,7 +30,7 @@
                 {% endif %}
             </div>
             <div class="row-main">
-                <h3>{{ track.title|default:"Без названия" }}</h3>
+                <h3 title="{{ track.display_title }}">{{ track.display_title|default:"Без названия" }}</h3>
                 <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
             </div>
             <span class="row-stat">{{ track.play_count }} прослушиваний</span>
