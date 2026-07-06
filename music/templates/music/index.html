@@ -6,7 +6,7 @@
         <div class="home-stage-inner">
             <div class="stage-copy">
                 <p class="eyebrow">Главная</p>
-                <h1>{% if featured_track %}{{ featured_track.title|default:"Музыкальная коллекция" }}{% else %}Музыкальная коллекция{% endif %}</h1>
+                <h1>{% if featured_track %}{{ featured_track.display_title|default:"Музыкальная коллекция" }}{% else %}Музыкальная коллекция{% endif %}</h1>
                 <p class="hero-copy">
                     {% if featured_track %}
                         {{ featured_track.artist|default:"Неизвестный исполнитель" }}{% if featured_track.status == 'completed' %} · обработанный трек готов к запуску{% endif %}
@@ -125,7 +125,7 @@
                         <i data-lucide="play"></i>
                     </button>
                 </div>
-                <h3 title="{{ track.title }}">{{ track.title|default:"Без названия" }}</h3>
+                <h3 title="{{ track.display_title }}">{{ track.display_title|default:"Без названия" }}</h3>
                 <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
             </article>
             {% endfor %}
@@ -153,7 +153,7 @@
                     {% endif %}
                 </div>
                 <div class="row-main">
-                    <h3 title="{{ track.title }}">{{ track.title|default:"Без названия" }}</h3>
+                    <h3 title="{{ track.display_title }}">{{ track.display_title|default:"Без названия" }}</h3>
                     <p>{{ track.artist|default:"Неизвестный исполнитель" }}</p>
                 </div>
                 <span class="status-badge status-{{ track.status }}">{{ track.get_status_display }}</span>
