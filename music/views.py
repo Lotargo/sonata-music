@@ -84,6 +84,39 @@ def normalized_ratio(value, default, maximum=1.0):
     return clamp(number, 0.0, maximum)
 
 
+def track_payload(t):
+    """Single source of truth for track JSON used by the player and live library refresh."""
+    return {
+        'id': t.id,
+        'title': t.display_title,
+        'raw_title': t.title,
+        'display_title': t.display_title,
+        'artist': t.artist,
+        'status': t.status,
+        'status_display': t.get_status_display(),
+        'cover_path': t.cover_image.url if t.cover_image else None,
+        'processed_path': t.processed_file.url if t.processed_file else None,
+        'audio_url': t.audio_file.url if t.audio_file else None,
+        'filename': t.original_filename,
+        'processed_filename': t.processed_filename,
+        'display_format': t.display_format,
+        'target_format': t.target_format,
+        'target_bitrate': t.target_bitrate,
+        'duration': t.duration,
+        'is_liked': t.is_liked,
+        'play_count': t.play_count,
+    }
+
+
+def delete_track_files(track):
+    if track.audio_file:
+        track.audio_file.delete(save=False)
+    if track.processed_file:
+        track.processed_file.delete(save=False)
+    if track.cover_image:
+        track.cover_image.delete(save=False)
+
+
 def normalize_processing_payload(data):
     mode = data.get('mode', 'ai')
     if mode not in PROCESSING_MODES:
@@ -144,6 +177,7 @@ def unique_mock_username(seed):
         username = f'{base}-{suffix}'
     return username
 
+
 def index(request):
     tracks = Track.objects.all().order_by('-created_at')
     featured_track = (
@@ -163,6 +197,7 @@ def index(request):
         'history_count': Track.objects.filter(play_count__gt=0).count(),
     }
     return render(request, 'music/index.html', context)
+
 
 @require_http_methods(["GET", "POST"])
 def upload(request):
@@ -206,6 +241,7 @@ def upload(request):
         return JsonResponse({
             'id': track.id,
             'title': track.title,
+            'display_title': track.display_title,
             'artist': track.artist,
             'cover_url': track.cover_image.url if track.cover_image else None,
             'audio_url': track.audio_file.url,
@@ -214,6 +250,8 @@ def upload(request):
 
     except Exception as e:
         logger.error(f"Error in upload/metadata extraction: {e}")
+        delete_track_files(track)
+        track.delete()
         return JsonResponse({'error': str(e)}, status=500)
 
 
@@ -293,6 +331,7 @@ def run_upscaling_thread(track_id, params):
         except:
             pass
 
+
 @require_POST
 def process_track(request, track_id):
     track = get_object_or_404(Track, id=track_id)
@@ -320,13 +359,16 @@ def process_track(request, track_id):
 
     return JsonResponse({'message': 'Processing started', 'status': 'processing'})
 
+
 def history(request):
     tracks = Track.objects.filter(play_count__gt=0).order_by('-play_count', '-created_at')
     return render(request, 'music/history.html', {'tracks': tracks})
 
+
 def likes(request):
     tracks = Track.objects.filter(is_liked=True).order_by('-created_at')
     return render(request, 'music/likes.html', {'tracks': tracks})
+
 
 @require_http_methods(["GET", "POST"])
 def account(request):
@@ -376,9 +418,11 @@ def register_mock(request):
 
     return JsonResponse(account_payload(get_account_profile(request)), status=201)
 
+
 def karaoke(request, track_id):
     track = get_object_or_404(Track, id=track_id)
     return render(request, 'music/karaoke.html', {'track': track})
+
 
 @require_POST
 def toggle_like(request, track_id):
@@ -387,6 +431,7 @@ def toggle_like(request, track_id):
     track.save()
     return JsonResponse({'is_liked': track.is_liked})
 
+
 @require_POST
 def record_play(request, track_id):
     track = get_object_or_404(Track, id=track_id)
@@ -394,20 +439,33 @@ def record_play(request, track_id):
     track.save()
     return JsonResponse({'play_count': track.play_count})
 
+
+@require_http_methods(["DELETE"])
+def cancel_pending_upload(request, track_id):
+    track = get_object_or_404(Track, id=track_id)
+
+    if track.status != 'pending' or track.processed_file:
+        return JsonResponse({
+            'message': 'Track is already committed and will not be discarded',
+            'status': track.status,
+        }, status=409)
+
+    delete_track_files(track)
+    track.delete()
+    return JsonResponse({'message': 'Pending upload discarded'})
+
+
 @require_http_methods(["DELETE"])
 def delete_track(request, track_id):
     track = get_object_or_404(Track, id=track_id)
 
-    # Delete files
-    if track.audio_file:
-        track.audio_file.delete(save=False)
-    if track.processed_file:
-        track.processed_file.delete(save=False)
-    if track.cover_image:
-        track.cover_image.delete(save=False)
+    if track.status == 'processing':
+        return JsonResponse({'error': 'Track is processing now'}, status=409)
 
+    delete_track_files(track)
     track.delete()
     return JsonResponse({'message': 'Track deleted'})
+
 
 @require_http_methods(["PATCH"])
 def edit_track(request, track_id):
@@ -419,9 +477,10 @@ def edit_track(request, track_id):
         if 'artist' in data:
             track.artist = data['artist']
         track.save()
-        return JsonResponse({'id': track.id, 'title': track.title, 'artist': track.artist})
+        return JsonResponse({'id': track.id, 'title': track.display_title, 'artist': track.artist})
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
+
 
 def get_track_metrics(request, track_id):
     track = get_object_or_404(Track, id=track_id)
@@ -446,24 +505,13 @@ def get_track_metrics(request, track_id):
     else:
         return JsonResponse({'error': 'Metrics file not found'}, status=404)
 
+
 def library_api(request):
     """API endpoint to get library tracks as JSON"""
     tracks = Track.objects.all().order_by('-created_at')
-    data = []
-    for t in tracks:
-        data.append({
-            'id': t.id,
-            'title': t.title,
-            'artist': t.artist,
-            'status': t.status,
-            'cover_path': t.cover_image.url if t.cover_image else None,
-            'processed_path': t.processed_file.url if t.processed_file else None,
-            'audio_url': t.audio_file.url if t.audio_file else None,
-            'filename': os.path.basename(t.audio_file.name),
-            'duration': t.duration,
-            'is_liked': t.is_liked
-        })
+    data = [track_payload(t) for t in tracks]
     return JsonResponse(data, safe=False)
+
 
 def serve_processed_file(request, filename):
     # This view might be redundant if we serve via MEDIA_URL,
