@@ -13,3 +13,4 @@ library/*
 media/
 verification_*.png
 .DS_Store
+debug_output/
