@@ -285,6 +285,92 @@ Frontend
 - [ ] Пользователь должен подтверждать, что имеет права на загрузку, обработку и публикацию материала.
 - [ ] Версионировать юридические документы и требовать повторное согласие при существенных изменениях.
 
+## Phase 23 — Account recovery, sessions and device security
+
+- [ ] Ввести `UserSession`/`DeviceSession`: user, device label, created_at, last_seen_at, ip_hash, user_agent_hash, revoked_at.
+- [ ] Дать пользователю список активных сессий и кнопку logout from all devices.
+- [ ] Добавить session rotation после login, provider link/unlink, password reset, privilege escalation и suspicious activity.
+- [ ] Поддержать trusted devices для снижения лишних проверок, но хранить их с expiration и revoke path.
+- [ ] Подготовить account recovery flow: lost provider access, provider account changed, email verification if email/password появится позже.
+- [ ] Для админов обязательно MFA, отдельные admin sessions, shorter TTL и audit log всех действий.
+- [ ] Добавить suspicious login detection: новая страна/ASN/device, резкая смена IP, слишком много попыток входа.
+- [ ] Ввести lockout/backoff не только на password flow, но и на sensitive OAuth/account-link actions.
+
+## Phase 24 — Moderation, copyright and takedown pipeline
+
+- [ ] Ввести `ContentReport`, `ModerationCase`, `ModerationAction`, `Appeal`, `TakedownRequest`.
+- [ ] Поддержать user reports: copyright, spam, abuse, wrong metadata, offensive cover/text, illegal content.
+- [ ] Добавить статусы: pending_review, hidden, blocked, restored, appealed, takedown_received, takedown_resolved.
+- [ ] Сделать возможность быстро скрыть public track без удаления оригинальных данных владельца.
+- [ ] Добавить repeat offender policy и abuse score по аккаунту.
+- [ ] Заложить audio fingerprint/content hash для поиска повторных загрузок заблокированного контента.
+- [ ] Все moderation actions должны идти через audit log и быть обратимыми, где это юридически допустимо.
+- [ ] Подготовить отдельную очередь/панель для ручной модерации публичной библиотеки.
+
+## Phase 25 — Search, indexing and media delivery
+
+### Search/indexing
+
+- [ ] Начать с PostgreSQL full-text/trigram indexes для публичной библиотеки.
+- [ ] Индексировать title, artist, album, genre, mood, language, tags, metadata, public status.
+- [ ] Добавить отдельные query models для recent, trending, top, by genre, by mood, by language.
+- [ ] Позже рассмотреть Meilisearch/OpenSearch как отдельный read-model, но не вводить сразу.
+- [ ] Search index update делать через events/outbox, а не синхронно внутри upload/metadata update flow.
+
+### Media delivery
+
+- [ ] Django не должен становиться файловым сервером для постоянной раздачи медиа.
+- [ ] Поддержать range requests, cache headers, signed media URLs и stream-only policy.
+- [ ] Разделить original, processed, preview clip, cover, waveform, lyrics/transcription artifacts.
+- [ ] Подготовить preview clips для публичной библиотеки и ограничения download policy.
+- [ ] Позже рассмотреть HLS/DASH для длинных файлов или streaming-режима.
+- [ ] Все media URLs должны проходить через entitlement/visibility checks и истекать по времени.
+
+## Phase 26 — CI/CD, testing, load testing and cost control
+
+### CI/CD and quality gates
+
+- [ ] Добавить обязательные checks: lint, format, typecheck, unit tests, integration tests, migration tests.
+- [ ] Добавить security checks: dependency audit, license scan, secret scan, unsafe raw SQL scan.
+- [ ] Добавить Docker build checks для `web`, workers и будущих сервисов.
+- [ ] Добавить smoke tests для upload -> process -> play -> delete flow.
+- [ ] Проверять migrations на пустой базе и на базе с legacy fixtures.
+- [ ] Добавить contract tests для HTTP/Kafka/WebSocket schemas.
+
+### Load testing and cost control
+
+- [ ] Ввести load/stress tests для upload, streaming, waveform, processing queue, WebSocket, public library feed.
+- [ ] Считать cost per job: CPU time, GPU time, RAM/VRAM, storage growth, egress, external API usage.
+- [ ] Ввести capacity model для Free/Standard/Pro: concurrent jobs, max file length, queue priority, retry budget.
+- [ ] Добавить queue saturation alerts и graceful degradation: disable AI temporarily, delay heavy jobs, preserve playback.
+- [ ] Заложить ClickHouse/Kafka retention cost и cleanup policies.
+- [ ] Не обещать Pro-лимиты, пока не измерена реальная стоимость AI/DSP обработки.
+
+## Phase 27 — Notifications, support tooling and ADR
+
+### Notifications
+
+- [ ] Добавить in-app notifications как первый канал.
+- [ ] События уведомлений: processing completed/failed, quota almost full, storage full, subscription expiring, payment failed, external drive disconnected, moderation decision, takedown request.
+- [ ] Позже добавить email/telegram/etc через отдельный NotificationProviderAdapter.
+- [ ] Уведомления делать идемпотентными и хранить delivery attempts.
+- [ ] Дать пользователю настройки уведомлений и quiet hours.
+
+### Support tooling
+
+- [ ] Сделать support/admin panel: find user, view quota, view jobs, recalculate storage usage, retry/cancel job, hide public track, disable suspicious account.
+- [ ] Любое support/admin действие должно иметь RBAC/ABAC, reason, audit log и, где нужно, approval.
+- [ ] Разделить роли: support, moderator, billing_admin, system_admin.
+- [ ] Не показывать support-ролям лишние PII/секреты; sensitive fields masked by default.
+- [ ] Добавить safe impersonation/debug mode без раскрытия токенов и паролей.
+
+### ADR
+
+- [ ] Завести `docs/adr/` для архитектурных решений.
+- [ ] Первые ADR: PostgreSQL as source of truth, Kafka KRaft, ClickHouse analytics, avoid MinIO, Django as BFF, StorageService abstraction.
+- [ ] Каждый ADR должен фиксировать context, decision, consequences, alternatives.
+- [ ] Новые крупные инфраструктурные решения принимать через ADR, чтобы не терять причины выбора.
+
 ## Suggested first implementation order
 
 1. Settings split + Docker Compose baseline.
@@ -297,11 +383,18 @@ Frontend
 8. Plans/Entitlements/UsageLedger/QuotaReservation without real payments.
 9. Storage quotas and `StorageService` abstraction.
 10. WebSocket statuses with Redis/Channels.
-11. Outbox/Inbox and Kafka KRaft.
-12. ClickHouse analytics consumers.
-13. Security hardening, encryption, observability.
-14. External drive integrations.
-15. FakePaymentProvider, then real payment provider after full testing.
+11. Account sessions, audit log and admin MFA baseline.
+12. Public library moderation/reporting baseline.
+13. Search/read models and media delivery policy.
+14. Outbox/Inbox and Kafka KRaft.
+15. ClickHouse analytics consumers.
+16. CI/CD quality gates, security checks and smoke tests.
+17. Observability, encryption and backup/restore drill.
+18. Load testing and cost model before expanding Pro/AI limits.
+19. External drive integrations.
+20. FakePaymentProvider, then real payment provider after full testing.
+21. Notifications and support tooling.
+22. ADR documents for all major architecture choices.
 
 ## Notes
 
