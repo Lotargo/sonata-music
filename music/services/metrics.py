@@ -31,7 +31,7 @@ class MetricsService:
         rms = np.sqrt(np.mean(mono**2))
         rms_db = 20 * np.log10(rms + 1e-9)
 
-        # Crest Factor (Dynamic Range approximation)
+        # Crest Factor / simple dynamic range approximation
         crest_factor = peak / (rms + 1e-9)
         crest_db = 20 * np.log10(crest_factor + 1e-9)
 
@@ -39,7 +39,40 @@ class MetricsService:
             "peak_db": float(round(peak_db, 2)),
             "rms_db": float(round(rms_db, 2)),
             "dynamic_range_db": float(round(crest_db, 2)),
+            "crest_factor": float(round(crest_factor, 2)),
         }
+
+    def _file_info(self, path, data, sample_rate):
+        """Collect display-safe file metadata for the comparison modal."""
+        basename = os.path.basename(path) if path else ""
+        ext = os.path.splitext(basename)[1].lstrip(".").lower()
+        channels = 1 if data.ndim == 1 else data.shape[1]
+        frames = len(data)
+        duration = frames / sample_rate if sample_rate else 0
+
+        info = {
+            "path": path,
+            "filename": basename,
+            "format": ext.upper() if ext else "UNKNOWN",
+            "sr": int(sample_rate),
+            "channels": int(channels),
+            "frames": int(frames),
+            "duration": float(round(duration, 3)),
+        }
+
+        try:
+            sf_info = sf.info(path)
+            info.update({
+                "format": (sf_info.format or info["format"]).upper(),
+                "subtype": sf_info.subtype,
+                "duration": float(round(sf_info.duration, 3)),
+                "frames": int(sf_info.frames),
+                "channels": int(sf_info.channels),
+            })
+        except Exception as e:
+            logger.warning(f"Could not read detailed audio info for {path}: {e}")
+
+        return info
 
     def generate_report(self, original_path, processed_path, output_base_path):
         """
@@ -56,10 +89,12 @@ class MetricsService:
             # Metrics
             metrics_orig = self._calculate_metrics(data_orig)
             metrics_proc = self._calculate_metrics(data_proc)
+            info_orig = self._file_info(original_path, data_orig, sr_orig)
+            info_proc = self._file_info(processed_path, data_proc, sr_proc)
 
             report = {
-                "original": {"path": original_path, "sr": sr_orig, **metrics_orig},
-                "processed": {"path": processed_path, "sr": sr_proc, **metrics_proc},
+                "original": {**info_orig, **metrics_orig},
+                "processed": {**info_proc, **metrics_proc},
             }
 
             # Save JSON
