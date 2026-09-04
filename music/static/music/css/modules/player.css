@@ -172,7 +172,7 @@
 
 .player-play svg[data-lucide="play"],
 .player-play svg.lucide-play {
-    transform: translateX(1px);
+    transform: none;
 }
 
 .player-play svg[data-lucide="pause"],

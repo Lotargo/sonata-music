@@ -372,7 +372,7 @@ function setIsPlaying(playing) {
     if (btn) {
         btn.innerHTML = playing
             ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
-            : '<i data-lucide="play" class="fill-current w-4 h-4 ml-0.5"></i>';
+            : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     }
     syncHeroStage(getCurrentTrack(), playing);
     sessionStorage.setItem('sonata_is_playing', String(playing));
@@ -927,7 +927,7 @@ function syncPlayerBarUi(track, playing) {
     if (btn) {
         btn.innerHTML = playing
             ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
-            : '<i data-lucide="play" class="fill-current w-4 h-4 ml-0.5"></i>';
+            : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     }
 
     updateLikeBtn(track.is_liked);
