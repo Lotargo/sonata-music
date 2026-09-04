@@ -5,6 +5,9 @@ from pathlib import Path
 import numpy as np
 
 # Ensure django setup
+project_root = str(Path(__file__).resolve().parent.parent)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django
 django.setup()

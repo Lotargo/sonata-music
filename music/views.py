@@ -334,7 +334,7 @@ def run_upscaling_thread(track_id, params):
             output_path=output_path,
             mode=mode,
             ddim_steps=int(params.get('steps', 50)),
-            guidance_scale=float(params.get('guidance', 3.5)),
+            guidance_scale=float(params.get('guidance', 1.8)),
             seed=int(params.get('seed', 42)),
             batch_size=int(params.get('batch_size', 2)),
             target_format=target_format,

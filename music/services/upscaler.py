@@ -334,16 +334,26 @@ class UpscalerService:
         )
         return target * gain
 
-    def _apply_crossover_injection(self, original, upscaled, sr, crossover_hz=14000):
+    def _apply_crossover_injection(
+        self, original, upscaled, sr, crossover_hz=15500, air_gain=0.75
+    ):
         """
-        High-Frequency Crossover Injection (Spectral Recovery):
-        Retains 100% of original signal below crossover_hz (pristine vocal acoustics,
-        zero phase cancellation, zero comb-filtering, natural body).
-        Only injects synthesized harmonic overtones and air (> crossover_hz) from AudioSR.
+        High-Frequency Linkwitz-Riley 4th-Order (LR4) Zero-Phase Crossover Injection:
+        1. Low band (< crossover_hz): Extracted purely from the original audio using zero-phase
+           bidirectional Butterworth filtering (sosfiltfilt), preserving 100% of original vocal
+           timbre, phase relationships, stereo width, and natural dynamics.
+        2. High band (> crossover_hz): Extracted from AudioSR super-resolution, isolating synthesized
+           harmonic overtones and high-frequency air (> 15.5 kHz).
+        3. Zero phase distortion & zero double-summing: LR4 ensures |H_lp|^2 + |H_hp|^2 = 1.0 everywhere,
+           completely eliminating comb-filtering, flanging, and distortion in the 14-16 kHz transition zone.
+        4. Soft-limiting on air: Softly clamps high-frequency spikes with tanh and applies gentle air_gain
+           to prevent diffusion noise sizzle.
         """
         try:
-            logger.info(f"Applying HF Crossover Injection (Crossover: {crossover_hz} Hz)...")
-            from scipy.signal import butter, sosfilt
+            logger.info(
+                f"Applying HF LR4 Zero-Phase Crossover Injection (Crossover: {crossover_hz} Hz, Air Gain: {air_gain})..."
+            )
+            from scipy.signal import butter, sosfiltfilt
 
             # Match lengths
             min_len = min(original.shape[-1], upscaled.shape[-1])
@@ -353,21 +363,39 @@ class UpscalerService:
             nyquist = sr / 2.0
             norm_cutoff = min(crossover_hz / nyquist, 0.95)
 
-            # Highpass filter on the newly synthesized AudioSR signal
-            sos_hp = butter(4, norm_cutoff, btype='high', output='sos')
+            # 2nd-order Butterworth SOS -> bidirectional filtering (sosfiltfilt) produces
+            # exactly 4th-order Linkwitz-Riley (LR4) with zero phase shift: |H_lp|^2 + |H_hp|^2 = 1
+            sos_lp = butter(2, norm_cutoff, btype="low", output="sos")
+            sos_hp = butter(2, norm_cutoff, btype="high", output="sos")
 
-            up_np = up.detach().cpu().numpy()
-            hf_air = sosfilt(sos_hp, up_np, axis=-1)
+            orig_np = orig.detach().cpu().numpy().astype(np.float64)
+            up_np = up.detach().cpu().numpy().astype(np.float64)
 
-            # Clean injection: original full-range audio + high-frequency synthesized air
-            hf_tensor = torch.from_numpy(hf_air.copy()).to(orig.device, dtype=orig.dtype)
+            # Zero-phase crossover split
+            low_band = sosfiltfilt(sos_lp, orig_np, axis=-1)
+            high_band = sosfiltfilt(sos_hp, up_np, axis=-1)
 
-            # Subtle gain scaling on HF air to prevent over-sizzle
-            blended = orig + (hf_tensor * 0.9)
+            # Soft-limit and scale high-frequency air to prevent diffusion sizzle / crackle
+            if air_gain != 1.0:
+                high_band = np.tanh(high_band * air_gain)
+            else:
+                high_band = np.tanh(high_band)
+
+            blended_np = low_band + high_band
+
+            # Peak safety check to prevent digital overs
+            max_val = np.max(np.abs(blended_np))
+            if max_val > 0.99:
+                blended_np = blended_np / max_val * 0.98
+
+            blended = torch.from_numpy(blended_np.astype(np.float32)).to(
+                orig.device, dtype=orig.dtype
+            )
             return blended
         except Exception as e:
             logger.warning(f"Crossover injection fallback to direct upscaled: {e}")
             return upscaled
+
 
     def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
@@ -609,7 +637,7 @@ class UpscalerService:
         output_path,
         mode="ai",
         ddim_steps=50,
-        guidance_scale=3.5,
+        guidance_scale=1.8,
         seed=42,
         target_format="wav",
         target_sample_rate=48000,
@@ -1028,10 +1056,10 @@ class UpscalerService:
                 )
 
                 # --- High-Frequency Crossover Injection (Spectral Recovery) ---
-                # Retains 100% of original vocal timbre, phase coherence, and dynamics below 14 kHz.
-                # Only injects newly synthesized harmonic air > 14 kHz from AudioSR, eliminating comb-filtering.
+                # Retains 100% of original vocal timbre, phase coherence, and dynamics below 15.5 kHz.
+                # Only injects newly synthesized harmonic air > 15.5 kHz from AudioSR with LR4 zero-phase crossover.
                 upscaled_waveform = self._apply_crossover_injection(
-                    waveform, upscaled_waveform, sr, crossover_hz=14000
+                    waveform, upscaled_waveform, sr, crossover_hz=15500, air_gain=0.75
                 )
 
             logger.info(
