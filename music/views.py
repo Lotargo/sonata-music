@@ -208,18 +208,12 @@ def unique_mock_username(seed):
 
 def index(request):
     tracks = Track.objects.all().order_by('-created_at')
-    available_tracks = [t for t in tracks if t.is_available]
-    featured_track = (
-        next((t for t in available_tracks if t.has_cover), None)
-        or next((t for t in available_tracks if t.status == 'completed'), None)
-        or (available_tracks[0] if available_tracks else tracks.first())
-    )
     liked_tracks = list(Track.objects.filter(is_liked=True).order_by('-created_at')[:4])
     history_tracks = list(Track.objects.filter(play_count__gt=0).order_by('-created_at')[:4])
 
     context = {
         'tracks': tracks,
-        'featured_track': featured_track,
+        'featured_track': None,
         'liked_tracks': liked_tracks,
         'history_tracks': history_tracks,
         'liked_count': Track.objects.filter(is_liked=True).count(),

@@ -5,25 +5,22 @@
     <section class="home-stage">
         <div class="home-stage-inner">
             <div class="stage-copy">
-                <p class="eyebrow">Главная</p>
-                <h1>{% if featured_track %}{{ featured_track.display_title|default:"Музыкальная коллекция" }}{% else %}Музыкальная коллекция{% endif %}</h1>
-                <p class="hero-copy">
-                    {% if featured_track %}
-                        {{ featured_track.artist|default:"Неизвестный исполнитель" }}{% if featured_track.status == 'completed' %} · обработанный трек готов к запуску{% endif %}
+                <h1 id="hero-title">Музыкальная коллекция</h1>
+                <p id="hero-copy" class="hero-copy">
+                    {% if tracks %}
+                        Выберите трек в списке ниже для воспроизведения
                     {% else %}
                         Загрузите первые треки, чтобы собрать библиотеку, историю обработки и избранное в одном пространстве.
                     {% endif %}
                 </p>
                 <div class="hero-controls">
-                    {% if featured_track %}
-                        <button type="button"
-                                onclick="playTrack(Number(this.dataset.trackId))"
-                                data-track-id="{{ featured_track.id }}"
-                                class="primary-pill primary-pill-hero">
-                            <i data-lucide="play"></i>
-                            <span>Слушать</span>
-                        </button>
-                    {% endif %}
+                    <button type="button"
+                            id="hero-play-btn"
+                            onclick="togglePlay()"
+                            class="primary-pill primary-pill-hero hidden">
+                        <i data-lucide="play"></i>
+                        <span id="hero-play-label">Слушать</span>
+                    </button>
                     <a href="{% url 'account' %}" class="soft-pill">
                         <i data-lucide="sliders-horizontal"></i>
                         <span>Настройки</span>

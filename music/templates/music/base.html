@@ -110,9 +110,9 @@
         {% include 'music/components/register_modal.html' %}
     </div>
 
-    {% if request.resolver_match.url_name == 'index' %}
-        <audio id="audio-player" class="hidden" preload="metadata" crossorigin="anonymous"></audio>
+    <audio id="audio-player" class="hidden" preload="metadata" crossorigin="anonymous"></audio>
 
+    {% if request.resolver_match.url_name != 'account' %}
         <div id="player-bar" class="player-bar">
             <!-- Full-width Seekbar on top edge (like Yandex Music) -->
             <div class="progress-track" id="progress-track" onclick="seek(event)" role="slider" aria-label="Перемотка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
@@ -215,22 +215,14 @@
         }
 
         setVisualEnergy(0.18);
-
-        if (!window.playTrack) {
-            window.playTrack = () => {
-                window.location.href = "{% url 'index' %}";
-            };
-        }
     </script>
 
     <script src="{% static 'music/js/upload.js' %}?v=6"></script>
     <script src="{% static 'music/js/upload-modal-copy.js' %}?v=3"></script>
     <script src="{% static 'music/js/details.js' %}?v=4"></script>
     <script src="{% static 'music/js/auth.js' %}?v=1"></script>
-    {% if request.resolver_match.url_name == 'index' %}
-        <script src="{% static 'music/js/player.js' %}?v=14"></script>
-        <script src="{% static 'music/js/track-display.js' %}?v=1"></script>
-        <script src="{% static 'music/js/comparison-audio-guard.js' %}?v=1"></script>
-    {% endif %}
+    <script src="{% static 'music/js/player.js' %}?v=15"></script>
+    <script src="{% static 'music/js/track-display.js' %}?v=2"></script>
+    <script src="{% static 'music/js/comparison-audio-guard.js' %}?v=2"></script>
 </body>
 </html>
