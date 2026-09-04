@@ -76,6 +76,64 @@ class StudioDSP:
                 "stereo_width": 1.15,
                 "target_lufs": -14.0,
             },
+            "vocal_polish": {
+                "reverb_enabled": False,
+                "bass_boost": -1.0,
+                "voice_clarity": 4.0,
+                "compressor_amount": 0.6,
+                "stereo_width": 1.1,
+                "target_lufs": -14.0,
+            },
+            "club_bass": {
+                "reverb_enabled": False,
+                "bass_boost": 5.0,
+                "voice_clarity": 1.0,
+                "compressor_amount": 0.7,
+                "stereo_width": 1.05,
+                "target_lufs": -10.0,
+            },
+            "broadcast": {
+                "reverb_enabled": False,
+                "bass_boost": 0.0,
+                "voice_clarity": 2.5,
+                "compressor_amount": 0.85,
+                "stereo_width": 1.0,
+                "target_lufs": -14.0,
+            },
+            "tape_warmth": {
+                "reverb_enabled": True,
+                "reverb_size": 0.2,
+                "reverb_amount": 0.08,
+                "bass_boost": 2.5,
+                "voice_clarity": -0.5,
+                "compressor_amount": 0.55,
+                "stereo_width": 0.95,
+                "target_lufs": -14.0,
+            },
+            "natural_air": {
+                "reverb_enabled": False,
+                "bass_boost": 0.0,
+                "voice_clarity": 3.0,
+                "compressor_amount": 0.45,
+                "stereo_width": 1.2,
+                "target_lufs": -14.0,
+            },
+            "music_fix": {
+                "reverb_enabled": False,
+                "bass_boost": 0.0,
+                "voice_clarity": 2.0,
+                "compressor_amount": 0.5,
+                "stereo_width": 1.05,
+                "target_lufs": -14.0,
+            },
+            "audio_repair": {
+                "reverb_enabled": False,
+                "bass_boost": 0.0,
+                "voice_clarity": 0.0,
+                "compressor_amount": 0.4,
+                "stereo_width": 1.0,
+                "target_lufs": -14.0,
+            },
         }
 
     def _apply_stereo_width(self, audio, width):
@@ -225,6 +283,13 @@ class StudioDSP:
                 HighShelfFilter(cutoff_frequency_hz=10000, gain_db=clarity * 0.5)
             )
 
+        # 3.1 Pro-Q 3 Parametric De-Mud Notch (350 Hz)
+        mud_cut = params.get("mud_cut_db", 0.0)
+        if mud_cut and float(mud_cut) != 0.0:
+            board.append(
+                PeakFilter(cutoff_frequency_hz=350, gain_db=float(mud_cut), q=1.6)
+            )
+
         # 4. Compressor
         # Map 0-1 "amount" to Threshold/Ratio
         comp_amt = params.get("compressor_amount", 0.0)
@@ -305,6 +370,12 @@ class StudioDSP:
             width = float(config.get("stereo_width", 1.0))
             if width != 1.0:
                 audio = self._apply_stereo_width(audio, width)
+
+            # ComfyUI_MusicTools Hooks
+            if preset_name == "music_fix" or config.get("mud_cut"):
+                audio = self.apply_music_fix(audio, sample_rate)
+            if preset_name == "audio_repair" or config.get("repair_audio"):
+                audio = self.apply_audio_repair(audio, sample_rate)
 
             # 5. Apply Pedalboard Chain
             board = self.build_chain(config)
@@ -531,6 +602,107 @@ class StudioDSP:
         """Backward compatibility alias pointing to apply_stealth_restoration."""
         return self.apply_stealth_restoration(audio, sample_rate, params=params)
 
+    def apply_music_fix(self, audio, sample_rate, mud_freq=350, mud_cut_db=-2.5, clarity_gain_db=1.0):
+        """
+        Deconstructs ComfyUI_MusicTools 'Music Fix' node logic:
+        - Surgical de-mud notch filter in 200–500 Hz region (default 350 Hz, -2.5 dB, Q=1.6)
+        - High-frequency air & clarity sheen (+1.0 dB above 11 kHz)
+        - Dynamic safety limiting
+        """
+        if audio.ndim == 1:
+            audio = audio[np.newaxis, :]
+
+        board = Pedalboard()
+        board.append(HighpassFilter(cutoff_frequency_hz=30))
+        board.append(PeakFilter(cutoff_frequency_hz=mud_freq, gain_db=mud_cut_db, q=1.6))
+        board.append(HighShelfFilter(cutoff_frequency_hz=11000, gain_db=clarity_gain_db))
+        board.append(Limiter(threshold_db=-1.0))
+
+        processed = board(audio, sample_rate)
+        return processed.astype(np.float32)
+
+    def apply_audio_repair(self, audio, sample_rate, remove_dc=True, declip=True, declick=True):
+        """
+        Deconstructs ComfyUI_MusicTools 'Audio Repair' node logic:
+        - DC Offset Removal: subtracts zero-frequency drift and runs subsonic 18 Hz filter
+        - De-clipper: detects clamped samples (|x| >= 0.99) and reconstructs analog peak continuity
+        - De-clicker: detects impulsive transient spikes and repairs with local interpolation
+        """
+        if audio.ndim == 1:
+            audio = audio[np.newaxis, :]
+        data = audio.copy().astype(np.float32)
+
+        # 1. DC Offset Removal
+        if remove_dc:
+            data = data - np.mean(data, axis=-1, keepdims=True)
+            board = Pedalboard()
+            board.append(HighpassFilter(cutoff_frequency_hz=18))
+            data = board(data, sample_rate)
+
+        # 2. De-clipper
+        if declip:
+            threshold = 0.985
+            for ch in range(data.shape[0]):
+                channel = data[ch]
+                clipped_indices = np.where(np.abs(channel) >= threshold)[0]
+                if len(clipped_indices) > 0:
+                    # Group contiguous clipped segments
+                    segments = []
+                    start = clipped_indices[0]
+                    prev = start
+                    for idx in clipped_indices[1:]:
+                        if idx == prev + 1:
+                            prev = idx
+                        else:
+                            segments.append((start, prev))
+                            start = idx
+                            prev = idx
+                    segments.append((start, prev))
+
+                    # Soft reconstruction using polynomial/spline interpolation
+                    for seg_start, seg_end in segments:
+                        seg_len = seg_end - seg_start + 1
+                        if seg_len <= 30: # Only reconstruct reasonable clip lengths
+                            left_ctx = max(0, seg_start - 4)
+                            right_ctx = min(len(channel), seg_end + 5)
+                            x_known = list(range(left_ctx, seg_start)) + list(range(seg_end + 1, right_ctx))
+                            if len(x_known) >= 4:
+                                y_known = channel[x_known]
+                                x_clip = np.arange(seg_start, seg_end + 1)
+                                try:
+                                    poly = np.polyfit(x_known, y_known, min(3, len(x_known) - 1))
+                                    reconstructed = np.polyval(poly, x_clip)
+                                    # Ensure direction matches sign of clip
+                                    sign = np.sign(channel[seg_start])
+                                    reconstructed = np.where(np.sign(reconstructed) == sign, reconstructed, channel[seg_start])
+                                    channel[seg_start:seg_end + 1] = reconstructed
+                                except Exception:
+                                    pass
+
+                    # Normalize if peaks exceeded headroom
+                    max_amp = np.max(np.abs(channel))
+                    if max_amp > 1.0:
+                        channel = channel / (max_amp + 0.05)
+                    data[ch] = channel
+
+        # 3. De-clicker (Impulsive spike suppression)
+        if declick:
+            from scipy.signal import medfilt
+            for ch in range(data.shape[0]):
+                channel = data[ch]
+                # Fast median filter window of 5 samples
+                smooth = medfilt(channel, kernel_size=5)
+                residual = np.abs(channel - smooth)
+                std_res = np.std(residual)
+                if std_res > 1e-6:
+                    click_mask = residual > (4.5 * std_res)
+                    # Suppress clicks by substituting median filtered value
+                    channel[click_mask] = smooth[click_mask]
+                data[ch] = channel
+
+        return data.astype(np.float32)
+
 
 # Create singleton
 dsp = StudioDSP()
+

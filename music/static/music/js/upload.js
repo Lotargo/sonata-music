@@ -218,6 +218,10 @@ function showConfigUI(track) {
         setUploadMode('restoration');
         updateBitrateOptions();
     }
+
+    setTimeout(() => {
+        initProQCanvas();
+    }, 60);
 }
 
 function resetUpload() {
@@ -348,15 +352,289 @@ function updateQualityPreset() {
     }
 }
 
+// --- AI Engine Selector ---
+
+function setAiEngine(engine) {
+    const input = document.getElementById('ai-engine');
+    if (input) input.value = engine;
+
+    ['stealth', 'audiosr', 'apollo', 'flowhigh'].forEach(eng => {
+        const btn = document.getElementById(`engine-${eng}`);
+        if (!btn) return;
+        const firstSpan = btn.querySelector('span:first-child');
+        if (eng === engine) {
+            btn.className = 'ai-engine-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600/30 border border-indigo-500 text-white shadow transition text-left';
+            if (firstSpan) firstSpan.className = 'block text-indigo-300 font-bold';
+        } else {
+            btn.className = 'ai-engine-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 border border-white/10 text-slate-300 hover:text-white hover:border-indigo-500/50 transition text-left';
+            if (firstSpan) firstSpan.className = 'block text-white font-bold';
+        }
+    });
+}
+
+// --- Pro-Q 3 Canvas Pre-Filter State & Drawing ---
+
+let proQState = {
+    crossoverFreq: 15500,
+    mudNotchDb: -1.5,
+    mudFreq: 350,
+    draggingNode: null,
+    isInitialized: false
+};
+
+function initProQCanvas() {
+    const canvas = document.getElementById('pro-q-canvas');
+    if (!canvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) {
+        setTimeout(initProQCanvas, 60);
+        return;
+    }
+
+    canvas.width = rect.width * dpr;
+    canvas.height = rect.height * dpr;
+
+    drawProQCurve();
+
+    if (!proQState.isInitialized) {
+        bindProQInteractions(canvas);
+        proQState.isInitialized = true;
+    }
+}
+
+function freqToX(freq, width) {
+    const minF = 20;
+    const maxF = 22000;
+    const ratio = (Math.log10(freq) - Math.log10(minF)) / (Math.log10(maxF) - Math.log10(minF));
+    return Math.max(0, Math.min(width, ratio * width));
+}
+
+function xToFreq(x, width) {
+    const minF = 20;
+    const maxF = 22000;
+    const ratio = Math.max(0, Math.min(1, x / width));
+    return Math.pow(10, Math.log10(minF) + ratio * (Math.log10(maxF) - Math.log10(minF)));
+}
+
+function dbToY(db, height) {
+    const minDb = -6.0;
+    const maxDb = 6.0;
+    const ratio = 1 - (db - minDb) / (maxDb - minDb);
+    return height * (0.15 + ratio * 0.7);
+}
+
+function yToDb(y, height) {
+    const minDb = -6.0;
+    const maxDb = 6.0;
+    const ratio = (y - height * 0.15) / (height * 0.7);
+    const db = maxDb - ratio * (maxDb - minDb);
+    return Math.max(-6, Math.min(0, db));
+}
+
+function drawProQCurve() {
+    const canvas = document.getElementById('pro-q-canvas');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.width;
+    const height = canvas.height;
+
+    ctx.clearRect(0, 0, width, height);
+
+    // Grid lines: 100Hz, 1kHz, 10kHz
+    const gridFreqs = [100, 1000, 10000];
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+    ctx.lineWidth = 1 * dpr;
+    gridFreqs.forEach(f => {
+        const x = freqToX(f, width);
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+        ctx.font = `${9 * dpr}px monospace`;
+        ctx.fillText(f >= 1000 ? `${f / 1000}k` : `${f}`, x + 3 * dpr, 12 * dpr);
+    });
+
+    // Zero dB line
+    const zeroY = dbToY(0, height);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+    ctx.setLineDash([4 * dpr, 4 * dpr]);
+    ctx.beginPath();
+    ctx.moveTo(0, zeroY);
+    ctx.lineTo(width, zeroY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // AI Super-Resolution shaded band (above crossover frequency)
+    const crossX = freqToX(proQState.crossoverFreq, width);
+    const gradAir = ctx.createLinearGradient(crossX, 0, width, 0);
+    gradAir.addColorStop(0, 'rgba(245, 158, 11, 0.05)');
+    gradAir.addColorStop(1, 'rgba(245, 158, 11, 0.22)');
+    ctx.fillStyle = gradAir;
+    ctx.fillRect(crossX, 0, width - crossX, height);
+
+    // Crossover vertical dashed line
+    ctx.strokeStyle = 'rgba(245, 158, 11, 0.85)';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.setLineDash([3 * dpr, 3 * dpr]);
+    ctx.beginPath();
+    ctx.moveTo(crossX, 0);
+    ctx.lineTo(crossX, height);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Curve rendering
+    const points = [];
+    const steps = 150;
+    for (let i = 0; i <= steps; i++) {
+        const x = (i / steps) * width;
+        const f = xToFreq(x, width);
+
+        // Bell Notch at mudFreq (350 Hz, Q=1.6)
+        const diffLn = Math.log(f) - Math.log(proQState.mudFreq);
+        const notchAtten = proQState.mudNotchDb * Math.exp(-(diffLn * diffLn) / (2 * 0.45 * 0.45));
+
+        const y = dbToY(notchAtten, height);
+        points.push({ x, y });
+    }
+
+    // Fill under curve
+    ctx.beginPath();
+    ctx.moveTo(0, height);
+    points.forEach((pt) => {
+        ctx.lineTo(pt.x, pt.y);
+    });
+    ctx.lineTo(width, height);
+    ctx.closePath();
+    const fillGrad = ctx.createLinearGradient(0, 0, 0, height);
+    fillGrad.addColorStop(0, 'rgba(99, 102, 241, 0.25)');
+    fillGrad.addColorStop(1, 'rgba(99, 102, 241, 0.01)');
+    ctx.fillStyle = fillGrad;
+    ctx.fill();
+
+    // Draw main curve stroke
+    ctx.beginPath();
+    points.forEach((pt, idx) => {
+        if (idx === 0) ctx.moveTo(pt.x, pt.y);
+        else ctx.lineTo(pt.x, pt.y);
+    });
+    ctx.strokeStyle = '#818cf8';
+    ctx.lineWidth = 2 * dpr;
+    ctx.stroke();
+
+    // De-Mud Node circle at 350 Hz
+    const notchX = freqToX(proQState.mudFreq, width);
+    const notchY = dbToY(proQState.mudNotchDb, height);
+
+    ctx.beginPath();
+    ctx.arc(notchX, notchY, 5 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = '#6366f1';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+
+    // Crossover handle circle at top of crossover line
+    const crossHandleY = 16 * dpr;
+    ctx.beginPath();
+    ctx.arc(crossX, crossHandleY, 5 * dpr, 0, Math.PI * 2);
+    ctx.fillStyle = '#f59e0b';
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 1.5 * dpr;
+    ctx.stroke();
+}
+
+function bindProQInteractions(canvas) {
+    const dpr = window.devicePixelRatio || 1;
+
+    const getPos = (e) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - rect.left) * dpr,
+            y: (e.clientY - rect.top) * dpr
+        };
+    };
+
+    canvas.addEventListener('mousedown', (e) => {
+        const pos = getPos(e);
+        const crossX = freqToX(proQState.crossoverFreq, canvas.width);
+        const notchX = freqToX(proQState.mudFreq, canvas.width);
+        const notchY = dbToY(proQState.mudNotchDb, canvas.height);
+
+        if (Math.abs(pos.x - crossX) < 16 * dpr) {
+            proQState.draggingNode = 'crossover';
+        } else if (Math.hypot(pos.x - notchX, pos.y - notchY) < 18 * dpr) {
+            proQState.draggingNode = 'notch';
+        }
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!proQState.draggingNode) return;
+        const pos = getPos(e);
+
+        if (proQState.draggingNode === 'crossover') {
+            const freq = Math.round(xToFreq(pos.x, canvas.width));
+            const clamped = Math.max(10000, Math.min(19000, freq));
+            const slider = document.getElementById('crossover-slider');
+            if (slider) slider.value = clamped;
+            updateProQCrossover(clamped);
+        } else if (proQState.draggingNode === 'notch') {
+            const db = yToDb(pos.y, canvas.height);
+            const stepped = Math.round(db * 2) / 2; // 0.5 step
+            const clamped = Math.max(-6, Math.min(0, stepped));
+            const slider = document.getElementById('notch-slider');
+            if (slider) slider.value = clamped;
+            updateProQNotch(clamped);
+        }
+    });
+
+    window.addEventListener('mouseup', () => {
+        proQState.draggingNode = null;
+    });
+}
+
+function updateProQCrossover(val) {
+    proQState.crossoverFreq = Number(val);
+    const khz = (proQState.crossoverFreq / 1000).toFixed(1);
+    const label = document.getElementById('crossover-marker-label');
+    const badge = document.getElementById('crossover-val');
+    if (label) label.textContent = `Crossover: ${khz} kHz`;
+    if (badge) badge.textContent = `${khz} kHz`;
+    drawProQCurve();
+}
+
+function updateProQNotch(val) {
+    proQState.mudNotchDb = Number(val);
+    const badge = document.getElementById('notch-val');
+    if (badge) badge.textContent = `${proQState.mudNotchDb > 0 ? '+' : ''}${proQState.mudNotchDb.toFixed(1)} dB`;
+    drawProQCurve();
+}
+
+window.addEventListener('resize', () => {
+    initProQCanvas();
+});
+
 function updateDspPreset() {
     const preset = document.getElementById('dsp-preset').value;
     const presets = {
-        "mastering": { stereo: 100, bass: 0, clarity: 0, comp: 50, rev: false },
-        "deep_bass": { stereo: 100, bass: 6, clarity: 1.5, comp: 60, rev: false },
-        "clear": { stereo: 110, bass: -2, clarity: 5, comp: 40, rev: false },
-        "warm": { stereo: 90, bass: 2, clarity: -1, comp: 60, rev: true, revSize: 30, revMix: 10 },
-        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false },
-        "stealth": { stereo: 115, bass: 0.5, clarity: 1.0, comp: 55, rev: false }
+        "mastering": { stereo: 100, bass: 0, clarity: 0, comp: 50, rev: false, notch: -1.5 },
+        "vocal_polish": { stereo: 110, bass: -1.5, clarity: 4.5, comp: 55, rev: true, revSize: 35, revMix: 15, notch: -2.0 },
+        "club_bass": { stereo: 115, bass: 5, clarity: 1.0, comp: 65, rev: false, notch: -1.0 },
+        "broadcast": { stereo: 100, bass: 0, clarity: 2.0, comp: 75, rev: false, notch: -1.5 },
+        "tape_warmth": { stereo: 95, bass: 1.5, clarity: 0.5, comp: 45, rev: true, revSize: 25, revMix: 10, notch: -1.0 },
+        "natural_air": { stereo: 120, bass: 0, clarity: 3.0, comp: 40, rev: false, notch: -1.5 },
+        "music_fix": { stereo: 105, bass: 0, clarity: 1.0, comp: 50, rev: false, notch: -2.5 },
+        "audio_repair": { stereo: 100, bass: 0, clarity: 0, comp: 45, rev: false, notch: 0.0 },
+        "deep_bass": { stereo: 100, bass: 6, clarity: 1.5, comp: 60, rev: false, notch: -1.0 },
+        "clear": { stereo: 110, bass: -2, clarity: 5, comp: 40, rev: false, notch: -2.0 },
+        "warm": { stereo: 90, bass: 2, clarity: -1, comp: 60, rev: true, revSize: 30, revMix: 10, notch: -1.0 },
+        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false, notch: -1.5 },
+        "stealth": { stereo: 115, bass: 0.5, clarity: 1.0, comp: 55, rev: false, notch: -2.0 }
     };
 
     const config = presets[preset];
@@ -373,6 +651,12 @@ function updateDspPreset() {
         if (config.rev) {
             setVal('reverb-size', config.revSize || 50);
             setVal('reverb-amount', config.revMix || 30);
+        }
+
+        if (config.notch !== undefined) {
+            const notchSlider = document.getElementById('notch-slider');
+            if (notchSlider) notchSlider.value = config.notch;
+            updateProQNotch(config.notch);
         }
     }
 }
@@ -550,6 +834,7 @@ async function startProcessing() {
         bitrate: document.getElementById('target-bitrate').value,
 
         // AI
+        engine: document.getElementById('ai-engine')?.value || 'audiosr',
         quality_preset: document.getElementById('quality-preset').value,
         steps: document.getElementById('ddim-steps').value,
         guidance: document.getElementById('guidance-scale').value,
@@ -558,6 +843,8 @@ async function startProcessing() {
 
         // DSP
         dsp_preset: document.getElementById('dsp-preset').value,
+        crossover_freq: Number(document.getElementById('crossover-slider')?.value || 15500),
+        mud_cut_db: Number(document.getElementById('notch-slider')?.value || -1.5),
         stereo_width: percentToRatio('stereo-width', 100),
         bass_boost: document.getElementById('bass-boost').value,
         voice_clarity: document.getElementById('voice-clarity').value,

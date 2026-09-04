@@ -159,6 +159,8 @@ def normalize_processing_payload(data):
         'voice_clarity': as_float(data.get('voice_clarity'), 0.0, -5.0, 10.0),
         'compressor_amount': normalized_ratio(data.get('compressor_amount'), 0.5),
         'stereo_width': normalized_ratio(data.get('stereo_width'), 1.0, 2.0),
+        'crossover_freq': as_float(data.get('crossover_freq'), 15500.0, 10000.0, 20000.0),
+        'mud_cut_db': as_float(data.get('mud_cut_db'), 0.0, -12.0, 0.0),
     }
 
     return {
@@ -170,6 +172,7 @@ def normalize_processing_payload(data):
         'guidance': as_float(data.get('guidance'), 3.5, 1.0, 15.0),
         'seed': as_int(data.get('seed'), 42, 0, 2147483647),
         'batch_size': as_int(data.get('batch_size'), 2, 1, 8),
+        'engine': data.get('engine') or 'audiosr',
         'dsp_preset': data.get('dsp_preset') or 'mastering',
         'dsp_params': dsp_params,
     }
