@@ -291,10 +291,17 @@ class UpscalerService:
 
         pad = window_size // 2
 
-        # Helper to compute envelope
+        # Helper to compute envelope (accelerated on GPU if available)
+        calc_device = "cuda" if torch.cuda.is_available() else source.device
+        orig_device = source.device
+
         def compute_envelope(waveform, win_size, padding):
-            squared = waveform**2
-            squared = squared.unsqueeze(0)
+            w_dev = waveform.to(calc_device)
+            squared = w_dev**2
+            if squared.dim() == 1:
+                squared = squared.unsqueeze(0).unsqueeze(0)
+            elif squared.dim() == 2:
+                squared = squared.unsqueeze(0)
             envelope = torch.nn.functional.avg_pool1d(
                 squared,
                 kernel_size=win_size,
@@ -302,8 +309,8 @@ class UpscalerService:
                 padding=padding,
                 count_include_pad=False,
             )
-            envelope = torch.sqrt(envelope + 1e-8)
-            return envelope.squeeze(0)
+            envelope = torch.sqrt(envelope + 1e-8).squeeze(0)
+            return envelope.to(orig_device)
 
         env_source = compute_envelope(source, window_size, pad)
         env_target = compute_envelope(target, window_size, pad)
