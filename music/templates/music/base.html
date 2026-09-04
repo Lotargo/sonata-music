@@ -5,14 +5,15 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Sonata — Music Upscaler{% endblock %}</title>
-    <link rel="icon" type="image/png" href="{% static 'music/img/favicon.png' %}?v=1">
-    <link rel="apple-touch-icon" href="{% static 'music/img/favicon.png' %}?v=1">
+    <link rel="icon" type="image/svg+xml" href="{% static 'music/img/favicon.svg' %}?v=3">
+    <link rel="icon" type="image/png" href="{% static 'music/img/favicon.png' %}?v=3">
+    <link rel="apple-touch-icon" href="{% static 'music/img/favicon.png' %}?v=3">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=45">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=46">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -46,9 +47,9 @@
 
     <div class="app-shell">
         <aside class="app-sidebar">
-            <a href="{% url 'index' %}" class="brand-lockup" aria-label="Sonata">
-                <img src="{% static 'music/img/logo-full.png' %}?v=1" alt="Sonata" class="brand-logo-full">
-                <img src="{% static 'music/img/logo-icon.png' %}?v=1" alt="Sonata" class="brand-logo-icon">
+            <a href="{% url 'index' %}" class="brand-lockup" aria-label="Sonata Music">
+                <img src="{% static 'music/img/logo-full.svg' %}?v=4" alt="Sonata Music" class="brand-logo-full">
+                <img src="{% static 'music/img/logo-icon.svg' %}?v=4" alt="Sonata Music" class="brand-logo-icon">
             </a>
 
             <nav class="sidebar-nav" aria-label="Основная навигация">
