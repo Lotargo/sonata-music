@@ -83,6 +83,7 @@ class Track(models.Model):
 
     # User interactions
     is_liked = models.BooleanField(default=False)
+    is_disliked = models.BooleanField(default=False)
     play_count = models.IntegerField(default=0)
     lyrics = models.TextField(blank=True, null=True)
 

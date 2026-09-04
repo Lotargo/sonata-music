@@ -19,6 +19,7 @@ urlpatterns = [
     path('register/mock/', views.register_mock, name='register_mock'),
     path('karaoke/<int:track_id>/', views.karaoke, name='karaoke'),
     path('api/like/<int:track_id>/', views.toggle_like, name='toggle_like'),
+    path('api/dislike/<int:track_id>/', views.toggle_dislike, name='toggle_dislike'),
     path('api/play/<int:track_id>/', views.record_play, name='record_play'),
     path('api/openapi.json', views.openapi_spec, name='openapi_spec'),
     path('api/docs/', views.scalar_docs, name='scalar_docs'),

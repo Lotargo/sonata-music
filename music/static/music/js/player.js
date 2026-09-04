@@ -33,6 +33,7 @@ const playerArtist = document.getElementById('player-artist');
 const playerCover = document.getElementById('player-cover');
 const playerCoverPlaceholder = document.getElementById('player-cover-placeholder');
 const likeBtn = document.getElementById('like-btn');
+const dislikeBtn = document.getElementById('dislike-btn');
 const muteBtn = document.getElementById('mute-btn');
 let lastNonZeroVolume = 1;
 
@@ -219,22 +220,26 @@ window.playTrack = async (id) => {
 
 function setupAudioAnalysis() {
     if (!window.AudioContext && !window.webkitAudioContext) return;
-    if (analyser) {
+    try {
+        if (!audioContext) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioContextClass();
+        }
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume().catch(() => {});
         }
-        return;
-    }
+        if (analyser) return;
 
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextClass();
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 128;
-    analyser.smoothingTimeConstant = 0.85;
-    frequencyData = new Uint8Array(analyser.frequencyBinCount);
-    mediaSource = audioContext.createMediaElementSource(audio);
-    mediaSource.connect(analyser);
-    analyser.connect(audioContext.destination);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.85;
+        frequencyData = new Uint8Array(analyser.frequencyBinCount);
+        mediaSource = audioContext.createMediaElementSource(audio);
+        mediaSource.connect(analyser);
+        analyser.connect(audioContext.destination);
+    } catch (e) {
+        console.warn('AudioContext / Analyser setup skipped:', e);
+    }
 }
 
 function loadTrack(track) {
@@ -252,6 +257,9 @@ function loadTrack(track) {
 
     playerTitle.textContent = getTrackTitle(track);
     playerArtist.textContent = track.artist || 'Unknown Artist';
+    if (currentTimeEl) currentTimeEl.textContent = '0:00';
+    if (durationEl) durationEl.textContent = formatTime(track.duration || 0);
+    if (progressBar) progressBar.style.width = '0%';
 
     if (track.cover_path) {
         playerCover.src = track.cover_path;
@@ -263,6 +271,7 @@ function loadTrack(track) {
     }
 
     updateLikeBtn(track.is_liked);
+    updateDislikeBtn(track.is_disliked);
     fetch(`/api/play/${track.id}/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
 }
 
@@ -301,17 +310,24 @@ function fadeAudioTo(target, duration = 240) {
     });
 }
 
-async function playAudioWithFade(duration = 260) {
+async function playAudioWithFade(duration = 160) {
     if (!audio.src) return;
     cancelAudioFade();
-    const targetVolume = getTargetVolume();
-    audio.volume = 0;
+    let targetVolume = getTargetVolume();
+    if (targetVolume <= 0) {
+        targetVolume = lastNonZeroVolume > 0 ? lastNonZeroVolume : 0.8;
+        if (volumeSlider) volumeSlider.value = targetVolume;
+        localStorage.setItem('player_volume', targetVolume);
+        updateMuteButton();
+    }
+    audio.volume = targetVolume;
     try {
+        if (audioContext && audioContext.state === 'suspended') {
+            await audioContext.resume().catch(() => {});
+        }
         await audio.play();
         setIsPlaying(true);
-        if (targetVolume > 0) await fadeAudioTo(targetVolume, duration);
     } catch (e) {
-        audio.volume = targetVolume;
         console.error('Playback failed:', e);
     }
 }
@@ -492,6 +508,16 @@ function initScrubbing() {
     const trackEl = progressTrack || document.getElementById('progress-track');
     if (!trackEl) return;
 
+    const applySeek = (e) => {
+        if (!audio.duration || isNaN(audio.duration)) return;
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        if (Number.isFinite(targetTime)) {
+            audio.currentTime = targetTime;
+            updateProgressVisuals(percent, targetTime);
+        }
+    };
+
     const onPointerDown = (e) => {
         if (!audio.duration || isNaN(audio.duration)) return;
         isScrubbing = true;
@@ -522,19 +548,14 @@ function initScrubbing() {
             trackEl.releasePointerCapture(e.pointerId);
         } catch (_) {}
 
-        if (!audio.duration || isNaN(audio.duration)) return;
-        const percent = getPercentFromEvent(e, trackEl);
-        const targetTime = percent * audio.duration;
-        if (Number.isFinite(targetTime)) {
-            audio.currentTime = targetTime;
-            updateProgressVisuals(percent, targetTime);
-        }
+        applySeek(e);
     };
 
     trackEl.addEventListener('pointerdown', onPointerDown);
     trackEl.addEventListener('pointermove', onPointerMove);
     trackEl.addEventListener('pointerup', onPointerUp);
     trackEl.addEventListener('pointercancel', onPointerUp);
+    trackEl.addEventListener('click', applySeek);
 
     trackEl.addEventListener('keydown', (e) => {
         if (!audio.duration || isNaN(audio.duration)) return;
@@ -663,8 +684,33 @@ window.toggleLikeCurrentTrack = async () => {
         });
         const data = await res.json();
         updateLikeBtn(data.is_liked);
+        updateDislikeBtn(data.is_disliked);
         const track = window.tracks.find(t => Number(t.id) === Number(currentTrackId));
-        if (track) track.is_liked = data.is_liked;
+        if (track) {
+            track.is_liked = data.is_liked;
+            track.is_disliked = data.is_disliked;
+        }
+    } catch(e) {
+        console.error(e);
+    }
+};
+
+window.toggleDislikeCurrentTrack = async () => {
+    if (!currentTrackId) return;
+
+    try {
+        const res = await fetch(`/api/dislike/${currentTrackId}/`, {
+             method: 'POST',
+             headers: {'X-CSRFToken': getCookie('csrftoken')}
+        });
+        const data = await res.json();
+        updateLikeBtn(data.is_liked);
+        updateDislikeBtn(data.is_disliked);
+        const track = window.tracks.find(t => Number(t.id) === Number(currentTrackId));
+        if (track) {
+            track.is_liked = data.is_liked;
+            track.is_disliked = data.is_disliked;
+        }
     } catch(e) {
         console.error(e);
     }
@@ -672,13 +718,14 @@ window.toggleLikeCurrentTrack = async () => {
 
 function updateLikeBtn(isLiked) {
     if (!likeBtn) return;
-    if (isLiked) {
-        likeBtn.classList.add('text-red-500', 'fill-current');
-        likeBtn.classList.remove('text-gray-500');
-    } else {
-        likeBtn.classList.add('text-gray-500');
-        likeBtn.classList.remove('text-red-500', 'fill-current');
-    }
+    likeBtn.classList.toggle('is-liked', Boolean(isLiked));
+    likeBtn.classList.toggle('text-red-500', Boolean(isLiked));
+    likeBtn.classList.toggle('fill-current', Boolean(isLiked));
+}
+
+function updateDislikeBtn(isDisliked) {
+    if (!dislikeBtn) return;
+    dislikeBtn.classList.toggle('is-disliked', Boolean(isDisliked));
 }
 
 function updateMuteButton() {

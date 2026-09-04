@@ -4,6 +4,7 @@ import mimetypes
 import threading
 import json
 import logging
+from urllib.parse import unquote
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse, FileResponse, StreamingHttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
@@ -112,6 +113,7 @@ def track_payload(t):
         'musical_key': t.musical_key,
         'spectral_centroid': t.spectral_centroid,
         'is_liked': t.is_liked,
+        'is_disliked': t.is_disliked,
         'play_count': t.play_count,
     }
 
@@ -494,8 +496,20 @@ def karaoke(request, track_id):
 def toggle_like(request, track_id):
     track = get_object_or_404(Track, id=track_id)
     track.is_liked = not track.is_liked
-    track.save()
-    return JsonResponse({'is_liked': track.is_liked})
+    if track.is_liked:
+        track.is_disliked = False
+    track.save(update_fields=['is_liked', 'is_disliked'])
+    return JsonResponse({'is_liked': track.is_liked, 'is_disliked': track.is_disliked})
+
+
+@require_POST
+def toggle_dislike(request, track_id):
+    track = get_object_or_404(Track, id=track_id)
+    track.is_disliked = not track.is_disliked
+    if track.is_disliked:
+        track.is_liked = False
+    track.save(update_fields=['is_liked', 'is_disliked'])
+    return JsonResponse({'is_liked': track.is_liked, 'is_disliked': track.is_disliked})
 
 
 @require_POST
@@ -621,7 +635,7 @@ def ranged_media_serve(request, path):
     Serves files from MEDIA_ROOT with HTTP 206 Partial Content (Range requests) support,
     allowing browsers to seek/scrub seamlessly through audio and video files.
     """
-    normalized_path = os.path.normpath(path).lstrip(r'\/')
+    normalized_path = os.path.normpath(unquote(path)).lstrip(r'\/')
     file_path = os.path.join(settings.MEDIA_ROOT, normalized_path)
 
     # Prevent directory traversal attacks
@@ -634,6 +648,13 @@ def ranged_media_serve(request, path):
     content_type, _ = mimetypes.guess_type(file_path)
     content_type = content_type or 'application/octet-stream'
 
+    def apply_cors(resp):
+        resp["Access-Control-Allow-Origin"] = "*"
+        resp["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        resp["Access-Control-Allow-Headers"] = "Range, Content-Type, Accept-Encoding"
+        resp["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges"
+        return resp
+
     range_header = request.META.get('HTTP_RANGE', '').strip()
     range_match = re.match(r'bytes=(\d+)-(\d*)', range_header) if range_header else None
 
@@ -645,7 +666,7 @@ def ranged_media_serve(request, path):
             resp = HttpResponse(status=416)
             resp['Content-Range'] = f'bytes */{file_size}'
             resp['Accept-Ranges'] = 'bytes'
-            return resp
+            return apply_cors(resp)
 
         length = last_byte - first_byte + 1
 
@@ -669,7 +690,7 @@ def ranged_media_serve(request, path):
         response['Content-Range'] = f'bytes {first_byte}-{last_byte}/{file_size}'
         response['Accept-Ranges'] = 'bytes'
         response['Cache-Control'] = 'no-cache'
-        return response
+        return apply_cors(response)
 
     def full_iterator(fp, chunk_size=65536):
         with open(fp, 'rb') as f:
@@ -683,7 +704,7 @@ def ranged_media_serve(request, path):
     )
     response['Content-Length'] = str(file_size)
     response['Accept-Ranges'] = 'bytes'
-    return response
+    return apply_cors(response)
 
 
 def serve_processed_file(request, filename):

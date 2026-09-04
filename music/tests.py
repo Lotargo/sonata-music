@@ -293,3 +293,44 @@ class ViewTests(TestCase):
         self.assertEqual(params['batch_size'], 4)
         self.assertEqual(params['dsp_params']['stereo_width'], 1.25)
         self.assertEqual(params['dsp_params']['compressor_amount'], 0.55)
+
+    def test_toggle_like_and_dislike_mutual_exclusion(self):
+        track = Track.objects.create(
+            title="Feedback Track",
+            artist="Listener",
+            audio_file=SimpleUploadedFile("feedback.mp3", b"dummy")
+        )
+
+        # 1. Like track
+        res = self.client.post(reverse('toggle_like', args=[track.id]))
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data['is_liked'])
+        self.assertFalse(data['is_disliked'])
+
+        track.refresh_from_db()
+        self.assertTrue(track.is_liked)
+        self.assertFalse(track.is_disliked)
+
+        # 2. Dislike track (should clear like)
+        res = self.client.post(reverse('toggle_dislike', args=[track.id]))
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertFalse(data['is_liked'])
+        self.assertTrue(data['is_disliked'])
+
+        track.refresh_from_db()
+        self.assertFalse(track.is_liked)
+        self.assertTrue(track.is_disliked)
+
+        # 3. Toggle dislike again (un-dislike)
+        res = self.client.post(reverse('toggle_dislike', args=[track.id]))
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertFalse(data['is_liked'])
+        self.assertFalse(data['is_disliked'])
+
+        track.refresh_from_db()
+        self.assertFalse(track.is_liked)
+        self.assertFalse(track.is_disliked)
+
