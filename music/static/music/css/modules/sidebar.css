@@ -11,10 +11,37 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 42px;
-    padding: 4px 10px 22px;
+    min-height: 44px;
+    padding: 4px 6px 20px;
     color: var(--text);
     text-decoration: none;
+    transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.brand-lockup:hover {
+    transform: translateY(-1px) scale(1.015);
+}
+
+.brand-logo-full {
+    display: block;
+    height: 38px;
+    width: auto;
+    max-width: 100%;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 10px rgba(255, 70, 30, 0.16));
+    transition: filter 0.25s ease;
+}
+
+.brand-lockup:hover .brand-logo-full {
+    filter: drop-shadow(0 4px 18px rgba(255, 110, 30, 0.38));
+}
+
+.brand-logo-icon {
+    display: none;
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+    filter: drop-shadow(0 2px 8px rgba(255, 70, 30, 0.22));
 }
 
 .brand-mark {
