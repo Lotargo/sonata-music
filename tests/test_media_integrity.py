@@ -77,3 +77,43 @@ class MediaIntegrityTests(TestCase):
 
         track.refresh_from_db()
         self.assertFalse(bool(track.cover_image))
+
+    def test_ranged_media_serve_full_and_partial(self):
+        # Create a temporary audio test file in MEDIA_ROOT
+        test_rel = "test_audio_sample.mp3"
+        test_abs = Path(settings.MEDIA_ROOT) / test_rel
+        test_data = b"0123456789ABCDEF0123456789ABCDEF"  # 32 bytes
+        test_abs.write_bytes(test_data)
+
+        try:
+            # 1. Full content request
+            resp_full = self.client.get(f'/media/{test_rel}')
+            self.assertEqual(resp_full.status_code, 200)
+            self.assertEqual(resp_full.headers.get('Accept-Ranges'), 'bytes')
+            self.assertEqual(b"".join(resp_full.streaming_content), test_data)
+
+            # 2. Ranged request (first 10 bytes: bytes=0-9)
+            resp_part = self.client.get(f'/media/{test_rel}', HTTP_RANGE='bytes=0-9')
+            self.assertEqual(resp_part.status_code, 206)
+            self.assertEqual(resp_part.headers.get('Accept-Ranges'), 'bytes')
+            self.assertEqual(resp_part.headers.get('Content-Range'), 'bytes 0-9/32')
+            self.assertEqual(resp_part.headers.get('Content-Length'), '10')
+            self.assertEqual(b"".join(resp_part.streaming_content), b"0123456789")
+
+            # 3. Ranged request to end (bytes=16-)
+            resp_end = self.client.get(f'/media/{test_rel}', HTTP_RANGE='bytes=16-')
+            self.assertEqual(resp_end.status_code, 206)
+            self.assertEqual(resp_end.headers.get('Content-Range'), 'bytes 16-31/32')
+            self.assertEqual(b"".join(resp_end.streaming_content), test_data[16:])
+
+            # 4. Out of bounds range
+            resp_oob = self.client.get(f'/media/{test_rel}', HTTP_RANGE='bytes=100-200')
+            self.assertEqual(resp_oob.status_code, 416)
+
+            # 5. Non-existent file
+            resp_404 = self.client.get('/media/does_not_exist_file.mp3')
+            self.assertEqual(resp_404.status_code, 404)
+        finally:
+            if test_abs.exists():
+                test_abs.unlink()
+

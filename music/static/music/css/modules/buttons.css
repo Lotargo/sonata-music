@@ -97,10 +97,14 @@
     fill: currentColor;
 }
 
-.icon-btn svg,
-.player-icon svg {
+.icon-btn svg {
     width: 18px;
     height: 18px;
+}
+
+.player-icon svg {
+    width: 22px;
+    height: 22px;
 }
 
 .filter-chip {

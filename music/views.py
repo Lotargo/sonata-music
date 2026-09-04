@@ -1,9 +1,11 @@
 import os
+import re
+import mimetypes
 import threading
 import json
 import logging
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, HttpResponse, FileResponse
+from django.http import JsonResponse, HttpResponse, FileResponse, StreamingHttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -614,16 +616,78 @@ def library_api(request):
     return JsonResponse(data, safe=False)
 
 
-def serve_processed_file(request, filename):
-    # This view might be redundant if we serve via MEDIA_URL,
-    # but for strict no-cache streaming it's useful.
-    file_path = os.path.join(settings.MEDIA_ROOT, 'processed', filename)
-    if not os.path.exists(file_path):
-        return JsonResponse({'error': 'File not found'}, status=404)
+def ranged_media_serve(request, path):
+    """
+    Serves files from MEDIA_ROOT with HTTP 206 Partial Content (Range requests) support,
+    allowing browsers to seek/scrub seamlessly through audio and video files.
+    """
+    normalized_path = os.path.normpath(path).lstrip(r'\/')
+    file_path = os.path.join(settings.MEDIA_ROOT, normalized_path)
 
-    response = FileResponse(open(file_path, 'rb'))
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    # Prevent directory traversal attacks
+    if not os.path.abspath(file_path).startswith(os.path.abspath(settings.MEDIA_ROOT)):
+        raise Http404("File not found")
+    if not os.path.exists(file_path) or os.path.isdir(file_path):
+        raise Http404("File not found")
+
+    file_size = os.path.getsize(file_path)
+    content_type, _ = mimetypes.guess_type(file_path)
+    content_type = content_type or 'application/octet-stream'
+
+    range_header = request.META.get('HTTP_RANGE', '').strip()
+    range_match = re.match(r'bytes=(\d+)-(\d*)', range_header) if range_header else None
+
+    if range_match:
+        first_byte = int(range_match.group(1))
+        last_byte = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+
+        if first_byte >= file_size or last_byte >= file_size or first_byte > last_byte:
+            resp = HttpResponse(status=416)
+            resp['Content-Range'] = f'bytes */{file_size}'
+            resp['Accept-Ranges'] = 'bytes'
+            return resp
+
+        length = last_byte - first_byte + 1
+
+        def file_iterator(fp, offset, req_len, chunk_size=65536):
+            with open(fp, 'rb') as f:
+                f.seek(offset)
+                remaining = req_len
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        response = StreamingHttpResponse(
+            file_iterator(file_path, first_byte, length),
+            status=206,
+            content_type=content_type
+        )
+        response['Content-Length'] = str(length)
+        response['Content-Range'] = f'bytes {first_byte}-{last_byte}/{file_size}'
+        response['Accept-Ranges'] = 'bytes'
+        response['Cache-Control'] = 'no-cache'
+        return response
+
+    def full_iterator(fp, chunk_size=65536):
+        with open(fp, 'rb') as f:
+            while chunk := f.read(chunk_size):
+                yield chunk
+
+    response = StreamingHttpResponse(
+        full_iterator(file_path),
+        status=200,
+        content_type=content_type
+    )
+    response['Content-Length'] = str(file_size)
+    response['Accept-Ranges'] = 'bytes'
     return response
+
+
+def serve_processed_file(request, filename):
+    return ranged_media_serve(request, os.path.join('processed', filename))
 
 
 def openapi_spec(request):

@@ -1,4 +1,4 @@
-# Music Upscaler Platform
+# Sonata Upscaler Platform
 
 Private technical README for the Django-based music upscaling service.
 

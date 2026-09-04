@@ -18,10 +18,12 @@ let lastLibrarySignature = '';
 let audioFadeFrame = null;
 let backgroundPlaybackWanted = false;
 let suppressBackgroundResume = false;
+let isScrubbing = false;
 
 // Elements
 const audio = document.getElementById('audio-player');
 const playPauseBtn = document.getElementById('play-pause-btn');
+const progressTrack = document.getElementById('progress-track');
 const progressBar = document.getElementById('progress-bar');
 const currentTimeEl = document.getElementById('current-time');
 const durationEl = document.getElementById('duration');
@@ -31,13 +33,13 @@ const playerArtist = document.getElementById('player-artist');
 const playerCover = document.getElementById('player-cover');
 const playerCoverPlaceholder = document.getElementById('player-cover-placeholder');
 const likeBtn = document.getElementById('like-btn');
-const karaokeLink = document.getElementById('karaoke-link');
 const muteBtn = document.getElementById('mute-btn');
 let lastNonZeroVolume = 1;
 
 // Init
 async function initPlayer() {
     restoreVolume();
+    initScrubbing();
     await fetchLibrary({ render: true });
     startLibraryPolling();
     startVisualizationLoop();
@@ -260,11 +262,6 @@ function loadTrack(track) {
         playerCoverPlaceholder.classList.remove('hidden');
     }
 
-    if (karaokeLink) {
-        karaokeLink.href = `/karaoke/${track.id}/`;
-        karaokeLink.classList.remove('hidden');
-    }
-
     updateLikeBtn(track.is_liked);
     fetch(`/api/play/${track.id}/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
 }
@@ -346,7 +343,6 @@ async function releaseCurrentTrackForDeletion() {
     playerArtist.textContent = 'Музыка ждёт';
     playerCover.classList.add('hidden');
     playerCoverPlaceholder.classList.remove('hidden');
-    if (karaokeLink) karaokeLink.classList.add('hidden');
 }
 
 // Controls
@@ -412,11 +408,20 @@ function updateListPlayButtons(id, playing) {
 
 // Events
 audio.addEventListener('timeupdate', () => {
-    if (!audio.duration) return;
-    const percent = (audio.currentTime / audio.duration) * 100;
-    progressBar.style.width = `${percent}%`;
-    currentTimeEl.innerText = formatTime(audio.currentTime);
-    durationEl.innerText = formatTime(audio.duration || 0);
+    if (isScrubbing) return;
+    if (!audio.duration || isNaN(audio.duration)) return;
+    const percent = Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100));
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (currentTimeEl) currentTimeEl.innerText = formatTime(audio.currentTime);
+    if (durationEl) durationEl.innerText = formatTime(audio.duration || 0);
+    const trackEl = progressTrack || document.getElementById('progress-track');
+    if (trackEl) trackEl.setAttribute('aria-valuenow', Math.round(percent));
+});
+
+audio.addEventListener('loadedmetadata', () => {
+    if (durationEl && audio.duration && !isNaN(audio.duration)) {
+        durationEl.innerText = formatTime(audio.duration);
+    }
 });
 
 audio.addEventListener('ended', () => {
@@ -460,13 +465,111 @@ document.addEventListener('visibilitychange', () => {
     backgroundPlaybackWanted = false;
 });
 
-// Seek
+// Scrubbing & Seeking
+function getPercentFromEvent(e, trackEl) {
+    const rect = trackEl.getBoundingClientRect();
+    if (!rect.width) return 0;
+    const clientX = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const x = clientX - rect.left;
+    return Math.min(1, Math.max(0, x / rect.width));
+}
+
+function updateProgressVisuals(percent, targetTime) {
+    const percentClamped = Math.min(100, Math.max(0, percent * 100));
+    if (progressBar) {
+        progressBar.style.width = `${percentClamped}%`;
+    }
+    if (currentTimeEl && Number.isFinite(targetTime)) {
+        currentTimeEl.innerText = formatTime(targetTime);
+    }
+    const trackEl = progressTrack || document.getElementById('progress-track');
+    if (trackEl) {
+        trackEl.setAttribute('aria-valuenow', Math.round(percentClamped));
+    }
+}
+
+function initScrubbing() {
+    const trackEl = progressTrack || document.getElementById('progress-track');
+    if (!trackEl) return;
+
+    const onPointerDown = (e) => {
+        if (!audio.duration || isNaN(audio.duration)) return;
+        isScrubbing = true;
+        trackEl.classList.add('is-scrubbing');
+        try {
+            trackEl.setPointerCapture(e.pointerId);
+        } catch (_) {}
+
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        updateProgressVisuals(percent, targetTime);
+    };
+
+    const onPointerMove = (e) => {
+        if (!isScrubbing) return;
+        if (!audio.duration || isNaN(audio.duration)) return;
+
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        updateProgressVisuals(percent, targetTime);
+    };
+
+    const onPointerUp = (e) => {
+        if (!isScrubbing) return;
+        isScrubbing = false;
+        trackEl.classList.remove('is-scrubbing');
+        try {
+            trackEl.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+
+        if (!audio.duration || isNaN(audio.duration)) return;
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        if (Number.isFinite(targetTime)) {
+            audio.currentTime = targetTime;
+            updateProgressVisuals(percent, targetTime);
+        }
+    };
+
+    trackEl.addEventListener('pointerdown', onPointerDown);
+    trackEl.addEventListener('pointermove', onPointerMove);
+    trackEl.addEventListener('pointerup', onPointerUp);
+    trackEl.addEventListener('pointercancel', onPointerUp);
+
+    trackEl.addEventListener('keydown', (e) => {
+        if (!audio.duration || isNaN(audio.duration)) return;
+        let nextTime = audio.currentTime;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            nextTime = Math.min(audio.duration, audio.currentTime + 5);
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            nextTime = Math.max(0, audio.currentTime - 5);
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            nextTime = 0;
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            nextTime = audio.duration;
+        } else {
+            return;
+        }
+        audio.currentTime = nextTime;
+        const percent = nextTime / audio.duration;
+        updateProgressVisuals(percent, nextTime);
+    });
+}
+
+// Seek fallback
 window.seek = (e) => {
-    if (!audio.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = x / rect.width;
-    audio.currentTime = percent * audio.duration;
+    if (!audio.duration || isNaN(audio.duration)) return;
+    const trackEl = progressTrack || document.getElementById('progress-track') || e.currentTarget;
+    const percent = getPercentFromEvent(e, trackEl);
+    const targetTime = percent * audio.duration;
+    if (Number.isFinite(targetTime)) {
+        audio.currentTime = targetTime;
+        updateProgressVisuals(percent, targetTime);
+    }
 };
 
 // Volume
