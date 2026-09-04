@@ -87,17 +87,6 @@ function bindDropZone() {
     };
 
     dropZone.ondragleave = () => {
-
-    fileInput.onchange = (e) => {
-        if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
-    };
-
-    dropZone.ondragover = (e) => {
-        e.preventDefault();
-        dropZone.classList.add('border-indigo-500', 'bg-indigo-500/5');
-    };
-
-    dropZone.ondragleave = () => {
         dropZone.classList.remove('border-indigo-500', 'bg-indigo-500/5');
     };
 
