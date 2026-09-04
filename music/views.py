@@ -95,9 +95,11 @@ def track_payload(t):
         'artist': t.artist,
         'status': t.status,
         'status_display': t.get_status_display(),
-        'cover_path': t.cover_image.url if t.cover_image else None,
-        'processed_path': t.processed_file.url if t.processed_file else None,
-        'audio_url': t.audio_file.url if t.audio_file else None,
+        'cover_path': t.cover_url,
+        'has_cover': t.has_cover,
+        'processed_path': t.processed_file.url if t.has_processed_file else None,
+        'audio_url': t.audio_file.url if t.has_audio_file else None,
+        'is_available': t.is_available,
         'filename': t.original_filename,
         'processed_filename': t.processed_filename,
         'display_format': t.display_format,
@@ -114,11 +116,20 @@ def track_payload(t):
 
 def delete_track_files(track):
     if track.audio_file:
-        track.audio_file.delete(save=False)
+        try:
+            track.audio_file.delete(save=False)
+        except Exception:
+            pass
     if track.processed_file:
-        track.processed_file.delete(save=False)
+        try:
+            track.processed_file.delete(save=False)
+        except Exception:
+            pass
     if track.cover_image:
-        track.cover_image.delete(save=False)
+        try:
+            track.cover_image.delete(save=False)
+        except Exception:
+            pass
 
 
 def normalize_processing_payload(data):
@@ -193,10 +204,11 @@ def unique_mock_username(seed):
 
 def index(request):
     tracks = Track.objects.all().order_by('-created_at')
+    available_tracks = [t for t in tracks if t.is_available]
     featured_track = (
-        Track.objects.filter(cover_image__isnull=False).order_by('-created_at').first()
-        or Track.objects.filter(status='completed').order_by('-created_at').first()
-        or tracks.first()
+        next((t for t in available_tracks if t.has_cover), None)
+        or next((t for t in available_tracks if t.status == 'completed'), None)
+        or (available_tracks[0] if available_tracks else tracks.first())
     )
     liked_tracks = list(Track.objects.filter(is_liked=True).order_by('-created_at')[:4])
     history_tracks = list(Track.objects.filter(play_count__gt=0).order_by('-created_at')[:4])
@@ -271,7 +283,7 @@ def upload(request):
             'title': track.title,
             'display_title': track.display_title,
             'artist': track.artist,
-            'cover_url': track.cover_image.url if track.cover_image else None,
+            'cover_url': track.cover_url,
             'audio_url': track.audio_file.url,
             'filename': os.path.basename(track.audio_file.name),
             'bpm': track.bpm,
@@ -330,7 +342,7 @@ def run_upscaling_thread(track_id, params):
         track.target_bitrate = params.get('bitrate')
         track.save()
 
-        cover_image_path = track.cover_image.path if track.cover_image else None
+        cover_image_path = track.cover_image.path if track.has_cover else None
 
         # Call Service
         success = upscaler.process_track(
@@ -636,3 +648,47 @@ def health_check(request):
     })
     response["Access-Control-Allow-Origin"] = "*"
     return response
+
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mu_fav_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0d1117"/>
+  <path d="M26 18v24.5a5.5 5.5 0 1 1-3.5-5.1V24h18v18.5a5.5 5.5 0 1 1-3.5-5.1V18H26z" fill="url(#mu_fav_grad)"/>
+</svg>"""
+
+
+@require_http_methods(["GET"])
+def favicon_view(request):
+    """Serve a lightweight SVG favicon to eliminate 404 spam in browser sessions."""
+    response = HttpResponse(FAVICON_SVG, content_type='image/svg+xml')
+    response['Cache-Control'] = 'public, max-age=86400'
+    return response
+
+
+def reconcile_missing_media(prune_orphans=False):
+    """
+    Scans tracks and synchronizes database state with physical disk files.
+    - If a cover image was deleted from disk, nulls out cover_image on the track.
+    - If prune_orphans is True and a track has neither audio nor processed file on disk, deletes the record.
+    Returns a dict with statistics.
+    """
+    fixed_covers = 0
+    pruned_tracks = 0
+    for track in Track.objects.all():
+        if track.cover_image and not track.has_cover:
+            track.cover_image = None
+            track.save(update_fields=['cover_image'])
+            fixed_covers += 1
+        if prune_orphans and not track.is_available:
+            track.delete()
+            pruned_tracks += 1
+    return {
+        'fixed_covers': fixed_covers,
+        'pruned_tracks': pruned_tracks,
+    }
+

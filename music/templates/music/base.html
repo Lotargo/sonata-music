@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Music Upscaler{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.ico">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
@@ -114,7 +115,7 @@
         <div id="player-bar" class="player-bar">
             <div class="player-now">
                 <div class="player-cover">
-                    <img id="player-cover" src="" alt="" class="hidden">
+                    <img id="player-cover" src="" alt="" class="hidden" onerror="this.classList.add('hidden'); const p = document.getElementById('player-cover-placeholder'); if (p) p.classList.remove('hidden');">
                     <div id="player-cover-placeholder" class="player-cover-placeholder">
                         <i data-lucide="music"></i>
                     </div>

@@ -19,6 +19,9 @@ def main():
         print("Running database migrations...")
         execute_from_command_line(['manage.py', 'migrate'])
 
+        print("Checking media integrity...")
+        execute_from_command_line(['manage.py', 'cleanup_missing_media'])
+
         print("\nStarting development server...")
         print("Waiting for server to become healthy before opening browser...\n")
 

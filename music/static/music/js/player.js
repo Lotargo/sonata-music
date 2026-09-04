@@ -104,7 +104,7 @@ function getStatusLabel(track) {
 
 function coverMarkup(track, placeholderClass = '') {
     if (track.cover_path) {
-        return `<img src="${escapeHtml(track.cover_path)}" alt="">`;
+        return `<img src="${escapeHtml(track.cover_path)}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');"><div class="${placeholderClass || 'cover-placeholder'} hidden"><i data-lucide="music"></i></div>`;
     }
     return placeholderClass
         ? `<div class="${placeholderClass}"><i data-lucide="music"></i></div>`

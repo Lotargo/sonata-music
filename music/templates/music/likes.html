@@ -46,8 +46,9 @@
                 <i data-lucide="play"></i>
             </button>
             <div class="row-cover">
-                {% if track.cover_image %}
-                    <img src="{{ track.cover_image.url }}" alt="">
+                {% if track.has_cover %}
+                    <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                    <i data-lucide="music" class="hidden"></i>
                 {% else %}
                     <i data-lucide="music"></i>
                 {% endif %}

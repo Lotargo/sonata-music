@@ -45,8 +45,9 @@
                     <div class="cover-stack" aria-hidden="true">
                         {% for track in liked_tracks %}
                             <span class="cover-stack-item">
-                                {% if track.cover_image %}
-                                    <img src="{{ track.cover_image.url }}" alt="">
+                                {% if track.has_cover %}
+                                    <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                                    <i data-lucide="music" class="hidden"></i>
                                 {% else %}
                                     <i data-lucide="music"></i>
                                 {% endif %}
@@ -74,8 +75,9 @@
                         </div>
                     </div>
                     <div class="spotlight-cover" aria-hidden="true">
-                        {% if history_tracks and history_tracks.0.cover_image %}
-                            <img src="{{ history_tracks.0.cover_image.url }}" alt="">
+                        {% if history_tracks and history_tracks.0.has_cover %}
+                            <img src="{{ history_tracks.0.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                            <i data-lucide="disc-3" class="hidden"></i>
                         {% else %}
                             <i data-lucide="disc-3"></i>
                         {% endif %}
@@ -116,8 +118,9 @@
             {% for track in tracks|slice:":5" %}
             <article class="cover-card" onclick="playTrack({{ track.id }})">
                 <div class="cover-art">
-                    {% if track.cover_image %}
-                        <img src="{{ track.cover_image.url }}" alt="">
+                    {% if track.has_cover %}
+                        <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                        <div class="cover-placeholder hidden"><i data-lucide="music"></i></div>
                     {% else %}
                         <div class="cover-placeholder"><i data-lucide="music"></i></div>
                     {% endif %}
@@ -146,8 +149,9 @@
                     <i data-lucide="play"></i>
                 </button>
                 <div class="row-cover">
-                    {% if track.cover_image %}
-                        <img src="{{ track.cover_image.url }}" alt="">
+                    {% if track.has_cover %}
+                        <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                        <i data-lucide="music" class="hidden"></i>
                     {% else %}
                         <i data-lucide="music"></i>
                     {% endif %}
