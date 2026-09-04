@@ -50,6 +50,30 @@ def get_openapi_spec():
             }
         ],
         "paths": {
+            "/api/health/": {
+                "get": {
+                    "tags": ["System & Health"],
+                    "summary": "Service health check",
+                    "description": "Returns service status and version for launchers and monitoring.",
+                    "responses": {
+                        "200": {
+                            "description": "Service is healthy and ready",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "status": {"type": "string", "example": "healthy"},
+                                            "service": {"type": "string", "example": "music_upscaler"},
+                                            "version": {"type": "string", "example": "2.4.0"}
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
             "/upload/": {
                 "post": {
                     "tags": ["Upload & Analysis"],

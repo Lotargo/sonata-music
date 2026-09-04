@@ -22,6 +22,8 @@ urlpatterns = [
     path('api/play/<int:track_id>/', views.record_play, name='record_play'),
     path('api/openapi.json', views.openapi_spec, name='openapi_spec'),
     path('api/docs/', views.scalar_docs, name='scalar_docs'),
+    path('health/', views.health_check, name='health_check'),
+    path('api/health/', views.health_check, name='api_health_check'),
 
     # Custom file serving for processed files (no-cache)
     path('library_files/<path:filename>', views.serve_processed_file, name='serve_processed_file'),

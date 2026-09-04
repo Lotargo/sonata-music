@@ -625,3 +625,14 @@ def openapi_spec(request):
 def scalar_docs(request):
     """Render Scalar API reference UI."""
     return render(request, 'music/scalar_docs.html')
+
+
+def health_check(request):
+    """Health check endpoint for container monitors and launcher readiness checks."""
+    response = JsonResponse({
+        'status': 'healthy',
+        'service': 'music_upscaler',
+        'version': '2.4.0'
+    })
+    response["Access-Control-Allow-Origin"] = "*"
+    return response

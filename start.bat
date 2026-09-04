@@ -31,8 +31,9 @@ if errorlevel 1 (
 )
 
 echo.
-echo Opening browser at http://127.0.0.1:8001/ ...
-start "" http://127.0.0.1:8001/
+echo Initializing health monitor...
+set "STUDIO_HEALTHCHECK_ACTIVE=1"
+start "" /b python -m music.healthcheck --open-browser --url http://127.0.0.1:8001/
 
 echo Launching Studio Server...
 echo Press Ctrl + C to stop the server.

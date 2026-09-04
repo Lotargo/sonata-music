@@ -1,5 +1,7 @@
 import os
 import sys
+import threading
+
 
 def main():
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -18,7 +20,18 @@ def main():
         execute_from_command_line(['manage.py', 'migrate'])
 
         print("\nStarting development server...")
-        print("Open http://127.0.0.1:8001/ in your browser.\n")
+        print("Waiting for server to become healthy before opening browser...\n")
+
+        if not os.environ.get('STUDIO_HEALTHCHECK_ACTIVE') and os.environ.get('RUN_MAIN') != 'true':
+            try:
+                from music.healthcheck import wait_for_server
+                threading.Thread(
+                    target=wait_for_server,
+                    kwargs={'url': 'http://127.0.0.1:8001/', 'open_browser': True},
+                    daemon=True
+                ).start()
+            except ImportError:
+                pass
 
         # Change default port to 8001 to avoid conflicts
         sys.argv.append('runserver')
@@ -26,5 +39,7 @@ def main():
 
     execute_from_command_line(sys.argv)
 
+
 if __name__ == '__main__':
     main()
+

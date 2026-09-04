@@ -49,3 +49,16 @@ class ScalarApiDocsTests(TestCase):
         self.assertContains(response, "@scalar/api-reference")
         self.assertContains(response, "/api/openapi.json")
         self.assertContains(response, "Music Upscaler Pro")
+
+    def test_health_endpoints(self):
+        # Test /health/
+        res1 = self.client.get(reverse('health_check'))
+        self.assertEqual(res1.status_code, 200)
+        self.assertEqual(res1.json().get('status'), 'healthy')
+
+        # Test /api/health/
+        res2 = self.client.get(reverse('api_health_check'))
+        self.assertEqual(res2.status_code, 200)
+        self.assertEqual(res2.json().get('status'), 'healthy')
+        self.assertEqual(res2.headers.get('Access-Control-Allow-Origin'), '*')
+
