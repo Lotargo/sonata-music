@@ -87,6 +87,17 @@ function bindDropZone() {
     };
 
     dropZone.ondragleave = () => {
+
+    fileInput.onchange = (e) => {
+        if (e.target.files.length > 0) handleFileSelect(e.target.files[0]);
+    };
+
+    dropZone.ondragover = (e) => {
+        e.preventDefault();
+        dropZone.classList.add('border-indigo-500', 'bg-indigo-500/5');
+    };
+
+    dropZone.ondragleave = () => {
         dropZone.classList.remove('border-indigo-500', 'bg-indigo-500/5');
     };
 
@@ -162,6 +173,52 @@ function showConfigUI(track) {
         coverPlace.classList.remove('hidden');
     }
 
+    // Render Acoustic Badges (BPM, Key, Centroid, Duration)
+    const badgesContainer = document.getElementById('acoustic-badges');
+    const badgeBpm = document.getElementById('badge-bpm');
+    const badgeKey = document.getElementById('badge-key');
+    const badgeCentroid = document.getElementById('badge-centroid');
+    const badgeDuration = document.getElementById('badge-duration');
+
+    if (badgesContainer) {
+        let hasAnyBadge = false;
+        if (track.bpm && badgeBpm) {
+            badgeBpm.textContent = `${track.bpm} BPM`;
+            badgeBpm.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeBpm) {
+            badgeBpm.parentElement.classList.add('hidden');
+        }
+
+        if (track.musical_key && badgeKey) {
+            badgeKey.textContent = track.musical_key;
+            badgeKey.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeKey) {
+            badgeKey.parentElement.classList.add('hidden');
+        }
+
+        if (track.spectral_centroid && badgeCentroid) {
+            badgeCentroid.textContent = `${Math.round(track.spectral_centroid)} Hz`;
+            badgeCentroid.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeCentroid) {
+            badgeCentroid.parentElement.classList.add('hidden');
+        }
+
+        if (track.duration && badgeDuration) {
+            const mins = Math.floor(track.duration / 60);
+            const secs = Math.floor(track.duration % 60).toString().padStart(2, '0');
+            badgeDuration.textContent = `${mins}:${secs}`;
+            badgeDuration.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeDuration) {
+            badgeDuration.parentElement.classList.add('hidden');
+        }
+
+        badgesContainer.classList.toggle('hidden', !hasAnyBadge);
+    }
+
     // Init Logic
     if (currentUploadFlow === 'library') {
         if (document.getElementById('library-enhance-quality')?.checked) {
@@ -206,10 +263,11 @@ function resetUploadUI() {
             <i data-lucide="music" class="w-8 h-8 text-yellow-400"></i>
         </div>
         <p class="text-xl font-bold mb-2">Перетащите файл или выберите вручную</p>
-        <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG до 50MB</p>
+        <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG, M4A, Opus до 50MB</p>
         <input type="file" id="file-input" class="hidden" accept="audio/*">
     `;
     document.getElementById('upload-config').classList.add('hidden');
+    document.getElementById('acoustic-badges')?.classList.add('hidden');
     lucide.createIcons();
     bindDropZone();
     configureUploadFlow();

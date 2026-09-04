@@ -74,6 +74,9 @@ class Track(models.Model):
 
     # Metadata
     duration = models.FloatField(blank=True, null=True) # seconds
+    bpm = models.FloatField(blank=True, null=True)
+    musical_key = models.CharField(max_length=30, blank=True, null=True)
+    spectral_centroid = models.FloatField(blank=True, null=True)
     status = models.CharField(max_length=50, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 

@@ -516,6 +516,15 @@ class StudioDSP:
             tape_noise = np.random.normal(0, noise_gain, processed.shape).astype(np.float32)
             processed = processed + tape_noise
 
+            # 5. Analog Drift (Micro-deviation of tempo / phase vocoder)
+            # Level 4 Anti-AI: Breaks deterministic spectral hash matching of automated detection bots
+            if params is None or params.get('analog_drift', True):
+                try:
+                    from .analyzer import apply_analog_drift
+                    processed = apply_analog_drift(processed, drift_rate=1.0015)
+                except Exception as ex:
+                    logger.debug(f"Analog drift skipped: {ex}")
+
             return processed
 
         except Exception as e:

@@ -103,6 +103,9 @@ def track_payload(t):
         'target_format': t.target_format,
         'target_bitrate': t.target_bitrate,
         'duration': t.duration,
+        'bpm': t.bpm,
+        'musical_key': t.musical_key,
+        'spectral_centroid': t.spectral_centroid,
         'is_liked': t.is_liked,
         'play_count': t.play_count,
     }
@@ -242,6 +245,21 @@ def upload(request):
             # Assign relative path to ImageField
             track.cover_image = meta['cover_path']
 
+        # Acoustic Analysis: BPM, Musical Key, Spectral Centroid, Duration
+        try:
+            from .services.analyzer import analyze_track_acoustics
+            acoustics = analyze_track_acoustics(track.audio_file.path)
+            if acoustics.get('bpm') is not None:
+                track.bpm = acoustics['bpm']
+            if acoustics.get('musical_key'):
+                track.musical_key = acoustics['musical_key']
+            if acoustics.get('spectral_centroid') is not None:
+                track.spectral_centroid = acoustics['spectral_centroid']
+            if acoustics.get('duration') is not None:
+                track.duration = acoustics['duration']
+        except Exception as ac_err:
+            logger.warning(f"Acoustic analysis failed during upload: {ac_err}")
+
         track.save()
 
         return JsonResponse({
@@ -251,7 +269,11 @@ def upload(request):
             'artist': track.artist,
             'cover_url': track.cover_image.url if track.cover_image else None,
             'audio_url': track.audio_file.url,
-            'filename': os.path.basename(track.audio_file.name)
+            'filename': os.path.basename(track.audio_file.name),
+            'bpm': track.bpm,
+            'musical_key': track.musical_key,
+            'spectral_centroid': track.spectral_centroid,
+            'duration': track.duration,
         }, status=201)
 
     except Exception as e:
@@ -329,6 +351,19 @@ def run_upscaling_thread(track_id, params):
             track.status = 'completed'
             # Save relative path to FileField
             track.processed_file.name = os.path.join('processed', output_filename)
+            try:
+                from .services.analyzer import analyze_track_acoustics
+                out_ac = analyze_track_acoustics(output_path)
+                if out_ac.get('duration') is not None:
+                    track.duration = out_ac['duration']
+                if not track.bpm and out_ac.get('bpm'):
+                    track.bpm = out_ac['bpm']
+                if not track.musical_key and out_ac.get('musical_key'):
+                    track.musical_key = out_ac['musical_key']
+                if not track.spectral_centroid and out_ac.get('spectral_centroid'):
+                    track.spectral_centroid = out_ac['spectral_centroid']
+            except Exception as ex:
+                logger.debug(f"Post-processing acoustic update skipped: {ex}")
         else:
             track.status = 'failed'
 
@@ -516,7 +551,44 @@ def get_track_metrics(request, track_id):
         except Exception as e:
             return JsonResponse({'error': f"Failed to read metrics: {str(e)}"}, status=500)
     else:
-        return JsonResponse({'error': 'Metrics file not found'}, status=404)
+        # Dynamic acoustic metrics fallback
+        try:
+            from .services.analyzer import analyze_track_acoustics
+            orig_ac = analyze_track_acoustics(track.audio_file.path) if track.audio_file else {}
+            proc_ac = analyze_track_acoustics(track.processed_file.path) if track.processed_file else {}
+            data = {
+                'file_info': {
+                    'original': {
+                        'filename': track.original_filename,
+                        'format': track.original_filename.split('.')[-1].upper() if '.' in track.original_filename else 'AUDIO',
+                        'sample_rate': '44.1 kHz',
+                        'duration': f"{int(track.duration // 60)}:{int(track.duration % 60):02d}" if track.duration else '-'
+                    },
+                    'processed': {
+                        'filename': track.processed_filename,
+                        'format': track.display_format,
+                        'sample_rate': '48.0 kHz',
+                        'duration': f"{int((proc_ac.get('duration') or track.duration or 0) // 60)}:{int((proc_ac.get('duration') or track.duration or 0) % 60):02d}"
+                    }
+                },
+                'metrics': {
+                    'BPM (Tempo)': {
+                        'original': f"{round(orig_ac.get('bpm'))} BPM" if orig_ac.get('bpm') else '-',
+                        'processed': f"{round(proc_ac.get('bpm') or track.bpm or 0)} BPM" if (proc_ac.get('bpm') or track.bpm) else '-'
+                    },
+                    'Musical Key': {
+                        'original': orig_ac.get('musical_key') or '-',
+                        'processed': proc_ac.get('musical_key') or track.musical_key or '-'
+                    },
+                    'Spectral Centroid': {
+                        'original': f"{round(orig_ac.get('spectral_centroid'))} Hz" if orig_ac.get('spectral_centroid') else '-',
+                        'processed': f"{round(proc_ac.get('spectral_centroid') or track.spectral_centroid or 0)} Hz" if (proc_ac.get('spectral_centroid') or track.spectral_centroid) else '-'
+                    }
+                }
+            }
+            return JsonResponse(data)
+        except Exception as e:
+            return JsonResponse({'error': f"Metrics unavailable: {e}"}, status=404)
 
 
 def library_api(request):
