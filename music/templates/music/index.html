@@ -116,7 +116,7 @@
 
         <div class="cover-grid">
             {% for track in tracks|slice:":5" %}
-            <article class="cover-card" onclick="playTrack({{ track.id }})">
+            <article class="cover-card" onclick="playTrack(Number(this.dataset.trackId))" data-track-id="{{ track.id }}">
                 <div class="cover-art">
                     {% if track.has_cover %}
                         <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
@@ -124,7 +124,7 @@
                     {% else %}
                         <div class="cover-placeholder"><i data-lucide="music"></i></div>
                     {% endif %}
-                    <button class="floating-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+                    <button class="floating-play play-btn" data-track-id="{{ track.id }}" onclick="event.stopPropagation(); playTrack(Number(this.dataset.trackId));" aria-label="Играть">
                         <i data-lucide="play"></i>
                     </button>
                 </div>
@@ -144,8 +144,8 @@
         {% if tracks %}
         <div class="track-table">
             {% for track in tracks %}
-            <article class="track-row group">
-                <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+            <article class="track-row group" data-track-id="{{ track.id }}">
+                <button onclick="playTrack(Number(this.dataset.trackId))" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
                     <i data-lucide="play"></i>
                 </button>
                 <div class="row-cover">
@@ -172,10 +172,10 @@
                 <span class="row-stat">{{ track.play_count }} просл.</span>
                 <div class="row-actions">
                     {% if track.status == 'completed' %}
-                    <button onclick="openDetails({{ track.id }})" class="icon-btn small" title="Детали"><i data-lucide="bar-chart-2"></i></button>
+                    <button onclick="openDetails(Number(this.dataset.trackId))" data-track-id="{{ track.id }}" class="icon-btn small" title="Детали"><i data-lucide="bar-chart-2"></i></button>
                     {% endif %}
-                    <button onclick="editTrack({{ track.id }})" class="icon-btn small" title="Переименовать"><i data-lucide="pencil"></i></button>
-                    <button onclick="deleteTrack({{ track.id }})" class="icon-btn small danger" title="Удалить"><i data-lucide="trash-2"></i></button>
+                    <button onclick="editTrack(Number(this.dataset.trackId))" data-track-id="{{ track.id }}" class="icon-btn small" title="Переименовать"><i data-lucide="pencil"></i></button>
+                    <button onclick="deleteTrack(Number(this.dataset.trackId))" data-track-id="{{ track.id }}" class="icon-btn small danger" title="Удалить"><i data-lucide="trash-2"></i></button>
                 </div>
             </article>
             {% endfor %}

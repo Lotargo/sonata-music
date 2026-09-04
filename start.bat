@@ -41,9 +41,12 @@ echo ----------------------------------------------------
 echo.
 
 python main.py %*
+set "EXIT_CODE=%ERRORLEVEL%"
 
-if errorlevel 1 (
-    echo.
-    echo [ERROR] Server exited with an error.
-    pause
+if defined EXIT_CODE (
+    if not "%EXIT_CODE%"=="0" if not "%EXIT_CODE%"=="-1073741510" if not "%EXIT_CODE%"=="130" (
+        echo.
+        echo [INFO] Server stopped with status code: %EXIT_CODE%
+    )
 )
+endlocal
