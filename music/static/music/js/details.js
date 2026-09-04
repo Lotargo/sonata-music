@@ -379,7 +379,7 @@ function updateComparePlayIcon() {
     if (comparePlayBtn) {
         comparePlayBtn.innerHTML = isComparePlaying
             ? '<i data-lucide="pause" class="fill-current w-6 h-6"></i>'
-            : '<i data-lucide="play" class="fill-current w-6 h-6 ml-1"></i>';
+            : '<i data-lucide="play" class="fill-current w-6 h-6"></i>';
         safeLucideRefresh();
     }
 }

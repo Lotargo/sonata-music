@@ -414,10 +414,10 @@ function updateListPlayButtons(id, playing) {
     btns.forEach(btn => {
         btn.innerHTML = playing
             ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
-            : '<i data-lucide="play" class="fill-current w-4 h-4 ml-1"></i>';
+            : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     });
     document.querySelectorAll(`.play-btn:not([data-track-id="${id}"])`).forEach(btn => {
-        btn.innerHTML = '<i data-lucide="play" class="fill-current w-4 h-4 ml-1"></i>';
+        btn.innerHTML = '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     });
     lucide.createIcons();
 }

@@ -58,6 +58,7 @@
     opacity: 0;
     transform: translateY(6px);
     transition: opacity .18s ease, transform .18s ease;
+    cursor: pointer;
 }
 
 .floating-play {
@@ -80,6 +81,20 @@
     width: 18px;
     height: 18px;
     fill: currentColor;
+}
+
+.floating-play svg[data-lucide="play"],
+.floating-play svg.lucide-play,
+.row-play svg[data-lucide="play"],
+.row-play svg.lucide-play {
+    transform: translateX(1.5px);
+}
+
+.floating-play svg[data-lucide="pause"],
+.floating-play svg.lucide-pause,
+.row-play svg[data-lucide="pause"],
+.row-play svg.lucide-pause {
+    transform: none;
 }
 
 .cover-card h3 {
