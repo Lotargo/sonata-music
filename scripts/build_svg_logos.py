@@ -34,7 +34,7 @@ RAY_SPECS = [
     (350, 0.62, 3.6,  2.0),
 ]
 
-def get_rays_path(cx, cy, max_r=28.0, r_black=9.0):
+def get_rays_path(cx, cy, max_r=55.0, r_black=17.5):
     r_inner = r_black * 0.75
     paths = []
     for ang, factor, hw, lean in RAY_SPECS:
@@ -147,21 +147,40 @@ plt.savefig('music/static/music/img/favicon.png', transparent=True, bbox_inches=
 plt.close(fig)
 
 # ==============================================================================
-# 3. logo-full.svg (ViewBox 0 0 144 60: Big Sun on left + SONATA music)
+# 3. logo-full.svg (ViewBox 0 0 180 96: 2x Larger Sun, Tight Text Spacing)
 # ==============================================================================
-cx_f, cy_f = 30.0, 30.0
-r_black_f = 9.0
-max_r_f = 28.0
+cx_f, cy_f = 48.0, 48.0
+r_black_f = 17.5 # 2x scale
+max_r_f = 55.0   # 2x scale
 rays_f = get_rays_path(cx_f, cy_f, max_r=max_r_f, r_black=r_black_f)
 
-text_x = 64.0
-baseline_s = 26.0
-sonata_d, tp_s = text_to_svg_path('SONATA', font_bold, size=17.0, offset_x=text_x, baseline_y=baseline_s)
+# Tight text placement pulling text closer to the sun
+text_x = 84.0
+sz_s = 20.5
+sz_m = 18.0
+gap_y = 2.5
 
-baseline_m = 43.5
-music_d, tp_m = text_to_svg_path('music', font_bold, size=15.5, offset_x=text_x, baseline_y=baseline_m)
+# Calculate accurate vertical centering
+fp_s = FontProperties(fname=font_bold, size=sz_s)
+tp_s_tmp = TextPath((text_x, 0), 'SONATA', prop=fp_s)
+bb_s = tp_s_tmp.get_extents()
 
-svg_full = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 60" width="144" height="60">
+fp_m = FontProperties(fname=font_bold, size=sz_m)
+tp_m_tmp = TextPath((text_x, 0), 'music', prop=fp_m)
+bb_m = tp_m_tmp.get_extents()
+
+total_h = bb_s.height + gap_y + bb_m.height
+top_y = cy_f - total_h / 2.0
+baseline_s = top_y + bb_s.height
+baseline_m = baseline_s + gap_y + bb_m.height - 2.0
+
+sonata_d, tp_s = text_to_svg_path('SONATA', font_bold, size=sz_s, offset_x=text_x, baseline_y=baseline_s)
+music_d, tp_m = text_to_svg_path('music', font_bold, size=sz_m, offset_x=text_x, baseline_y=baseline_m)
+
+view_w = 180
+view_h = 96
+
+svg_full = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {view_w} {view_h}" width="{view_w}" height="{view_h}">
   <defs>
     <linearGradient id="sunRaysFull" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#FFE54C" />
@@ -169,13 +188,13 @@ svg_full = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 144 60" widt
       <stop offset="100%" stop-color="#FFAC00" />
     </linearGradient>
   </defs>
-  <!-- Mark: Asymmetric Black Sun (Large, heroic) -->
+  <!-- Mark: Asymmetric Black Sun (2x Scale, Dominant Hero) -->
   <g id="brand-sun">
     <path d="{rays_f}" fill="url(#sunRaysFull)" />
     <!-- Solid Black Sun Core with Crisp Eclipse Edge (No inner dots/dashes) -->
-    <circle cx="{cx_f:.1f}" cy="{cy_f:.1f}" r="{r_black_f:.1f}" fill="#060606" stroke="#FFD21E" stroke-width="1.8" />
+    <circle cx="{cx_f:.1f}" cy="{cy_f:.1f}" r="{r_black_f:.1f}" fill="#060606" stroke="#FFD21E" stroke-width="2.6" />
   </g>
-  <!-- Typography: SONATA (uppercase) + music (lowercase left-aligned) in Montserrat Bold -->
+  <!-- Typography: SONATA (uppercase, white) + music (lowercase, yellow) in Montserrat Bold -->
   <g id="brand-typography">
     <path d="{sonata_d}" fill="#FFFFFF" fill-rule="evenodd" />
     <path d="{music_d}" fill="#FFD21E" fill-rule="evenodd" />
@@ -186,13 +205,13 @@ with open('music/static/music/img/logo-full.svg', 'w', encoding='utf-8') as f:
     f.write(svg_full)
 
 # ==============================================================================
-# 4. logo-full.png (High-Res Transparent Raster Master: 576x240)
+# 4. logo-full.png (High-Res Transparent Raster Master: 720x384)
 # ==============================================================================
-fig, ax = plt.subplots(figsize=(6, 2.5), dpi=96)
+fig, ax = plt.subplots(figsize=(7.5, 4.0), dpi=96)
 fig.patch.set_alpha(0.0)
 ax.set_facecolor('none')
-ax.set_xlim(-2, 142)
-ax.set_ylim(60, 0)
+ax.set_xlim(-2, view_w + 2)
+ax.set_ylim(view_h + 2, -2)
 ax.axis('off')
 ax.set_aspect('equal')
 
@@ -213,7 +232,7 @@ for ang, factor, hw, lean in RAY_SPECS:
     ax.add_patch(poly)
 
 # Black Sun Core
-ax.add_patch(Circle((cx_f, cy_f), r_black_f, facecolor='#060606', edgecolor='#FFD21E', linewidth=1.8))
+ax.add_patch(Circle((cx_f, cy_f), r_black_f, facecolor='#060606', edgecolor='#FFD21E', linewidth=2.6))
 
 # SONATA
 verts_s = [[v[0], baseline_s - v[1]] for v in tp_s.vertices]
@@ -227,45 +246,20 @@ plt.savefig('music/static/music/img/logo-full.png', transparent=True, bbox_inche
 plt.close(fig)
 
 # ==============================================================================
-# 5. Visual Preview Artifact on Dark App Background
+# 5. Visual Preview Artifact on Checkerboard Background
 # ==============================================================================
-fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4.2), dpi=140)
-fig.patch.set_facecolor('#080808')
+fig, ax = plt.subplots(figsize=(10, 5), dpi=140)
+fig.patch.set_facecolor('#040e11')
 
-# Left panel: Standalone Sun Emblem on checkerboard
-ax1.set_facecolor('#111111')
-for i in range(0, 48, 8):
-    for j in range(0, 48, 8):
-        if (i // 8 + j // 8) % 2 == 0:
-            ax1.add_patch(plt.Rectangle((i, j), 8, 8, color='#181818'))
-ax1.set_xlim(0, 48)
-ax1.set_ylim(48, 0)
-ax1.axis('off')
-ax1.set_aspect('equal')
-ax1.set_title('Black Sun Mark (favicon & collapsed)', color='#E0E0E0', fontsize=11, pad=8)
+# Draw checkerboard matching user view
+for i in range(-2, view_w + 14, 10):
+    for j in range(-2, view_h + 10, 10):
+        if (i // 10 + j // 10) % 2 == 0:
+            ax.add_patch(plt.Rectangle((i, j), 10, 10, color='#14252a'))
+        else:
+            ax.add_patch(plt.Rectangle((i, j), 10, 10, color='#0b181c'))
 
-for ang, factor, hw, lean in RAY_SPECS:
-    length = max_r_i * factor
-    rad_b1 = math.radians(ang - hw)
-    rad_b2 = math.radians(ang + hw)
-    rad_tip = math.radians(ang + lean)
-    bx1 = cx_i + r_inner_i * math.cos(rad_b1)
-    by1 = cy_i - r_inner_i * math.sin(rad_b1)
-    bx2 = cx_i + r_inner_i * math.cos(rad_b2)
-    by2 = cy_i - r_inner_i * math.sin(rad_b2)
-    tx = cx_i + length * math.cos(rad_tip)
-    ty = cy_i - length * math.sin(rad_tip)
-    ax1.add_patch(Polygon([[bx1, by1], [tx, ty], [bx2, by2]], closed=True, facecolor='#FFD21E', edgecolor='none'))
-ax1.add_patch(Circle((cx_i, cy_i), r_black_i, facecolor='#060606', edgecolor='#FFD21E', linewidth=1.8))
-
-# Right panel: Full Lockup on #040404 app sidebar background
-ax2.set_facecolor('#040404')
-ax2.set_xlim(-2, 142)
-ax2.set_ylim(60, 0)
-ax2.axis('off')
-ax2.set_aspect('equal')
-ax2.set_title('Full Lockup (Big Sun + SONATA music in Montserrat Bold)', color='#E0E0E0', fontsize=11, pad=8)
-
+# Solar rays
 for ang, factor, hw, lean in RAY_SPECS:
     length = max_r_f * factor
     rad_b1 = math.radians(ang - hw)
@@ -277,15 +271,21 @@ for ang, factor, hw, lean in RAY_SPECS:
     by2 = cy_f - r_inner_f * math.sin(rad_b2)
     tx = cx_f + length * math.cos(rad_tip)
     ty = cy_f - length * math.sin(rad_tip)
-    ax2.add_patch(Polygon([[bx1, by1], [tx, ty], [bx2, by2]], closed=True, facecolor='#FFD21E', edgecolor='none'))
+    ax.add_patch(Polygon([[bx1, by1], [tx, ty], [bx2, by2]], closed=True, facecolor='#FFD21E', edgecolor='none'))
 
-ax2.add_patch(Circle((cx_f, cy_f), r_black_f, facecolor='#060606', edgecolor='#FFD21E', linewidth=1.8))
-ax2.add_patch(PathPatch(Path(verts_s, tp_s.codes), facecolor='#FFFFFF', edgecolor='none'))
-ax2.add_patch(PathPatch(Path(verts_m, tp_m.codes), facecolor='#FFD21E', edgecolor='none'))
+ax.add_patch(Circle((cx_f, cy_f), r_black_f, facecolor='#060606', edgecolor='#FFD21E', linewidth=2.6))
+ax.add_patch(PathPatch(Path(verts_s, tp_s.codes), facecolor='#FFFFFF', edgecolor='none'))
+ax.add_patch(PathPatch(Path(verts_m, tp_m.codes), facecolor='#FFD21E', edgecolor='none'))
+
+ax.set_xlim(-2, view_w + 2)
+ax.set_ylim(view_h + 2, -2)
+ax.axis('off')
+ax.set_aspect('equal')
+ax.set_title('Sonata Music (2x Sun Scale, Snug Text Spacing, No Dead Air)', color='#FFD21E', fontsize=12, pad=10)
 
 plt.tight_layout()
 out_preview = 'C:/Users/etotm/.gemini/antigravity-ide/brain/91d3e00c-d89d-4bf6-9fd2-5ce77924f514/logo_final_preview.png'
-plt.savefig(out_preview, facecolor='#080808', edgecolor='none')
+plt.savefig(out_preview, facecolor='#040e11', edgecolor='none')
 plt.close(fig)
 
-print('All vector and raster logo assets generated successfully!')
+print('Updated 2x scale logos generated successfully!')
