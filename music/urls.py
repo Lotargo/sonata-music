@@ -6,8 +6,11 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('', views.index, name='index'),
     path('upload/', views.upload, name='upload'),
+    path('process-upload/', views.process_staged_upload, name='process_staged_upload'),
+    path('commit-upload/', views.commit_staged_upload, name='commit_staged_upload'),
     path('process/<int:track_id>/', views.process_track, name='process_track'),
     path('library/', views.library_api, name='library_api'),
+    path('cancel-upload/', views.cancel_staged_upload, name='cancel_staged_upload'),
     path('cancel-upload/<int:track_id>/', views.cancel_pending_upload, name='cancel_pending_upload'),
     path('delete/<int:track_id>/', views.delete_track, name='delete_track'),
     path('edit/<int:track_id>/', views.edit_track, name='edit_track'),

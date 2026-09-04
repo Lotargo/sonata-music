@@ -77,8 +77,8 @@ def get_openapi_spec():
             "/upload/": {
                 "post": {
                     "tags": ["Upload & Analysis"],
-                    "summary": "Upload and analyze audio file",
-                    "description": "Uploads an audio file, extracts acoustic parameters (BPM, musical key, spectral centroid), generates spectrogram and album cover preview.",
+                    "summary": "Stage and analyze audio file",
+                    "description": "Stores an audio file temporarily and returns a signed upload token plus preview metadata. No library Track is created until processing or an explicit library commit starts.",
                     "requestBody": {
                         "required": True,
                         "content": {
@@ -98,8 +98,8 @@ def get_openapi_spec():
                         }
                     },
                     "responses": {
-                        "200": {
-                            "description": "Track analyzed and registered successfully",
+                        "201": {
+                            "description": "Upload staged and analyzed successfully",
                             "content": {
                                 "application/json": {
                                     "schema": {
@@ -111,6 +111,25 @@ def get_openapi_spec():
                         "400": {
                             "description": "Invalid file format or corrupt audio"
                         }
+                    }
+                }
+            },
+            "/process-upload/": {
+                "post": {
+                    "tags": ["Processing & AI Upscaling"],
+                    "summary": "Commit a staged upload and start processing",
+                    "description": "Creates the library Track from a signed staged-upload token and immediately starts DSP, AI, hybrid, or another supported processing mode.",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/StagedProcessTrackRequest"}
+                            }
+                        }
+                    },
+                    "responses": {
+                        "201": {"description": "Track created and processing started"},
+                        "400": {"description": "Invalid, expired, or already consumed upload token"}
                     }
                 }
             },
@@ -371,17 +390,30 @@ def get_openapi_spec():
             "schemas": {
                 "TrackUploadResponse": {
                     "type": "object",
+                    "required": ["upload_token", "title", "artist", "filename"],
                     "properties": {
-                        "id": {"type": "integer", "example": 42},
+                        "upload_token": {"type": "string", "description": "Signed token used to commit or process this temporary upload"},
                         "title": {"type": "string", "example": "Cyberpunk Sunset"},
                         "artist": {"type": "string", "example": "Synth Master"},
+                        "filename": {"type": "string", "example": "cyberpunk-sunset.wav"},
                         "duration": {"type": "number", "example": 184.2},
                         "bpm": {"type": "number", "example": 128.0},
                         "musical_key": {"type": "string", "example": "C Minor"},
                         "spectral_centroid": {"type": "number", "example": 3200.5},
-                        "cover_url": {"type": "string", "nullable": True},
-                        "status": {"type": "string", "example": "pending"}
+                        "cover_url": {"type": "string", "nullable": True}
                     }
+                },
+                "StagedProcessTrackRequest": {
+                    "allOf": [
+                        {"$ref": "#/components/schemas/ProcessTrackRequest"},
+                        {
+                            "type": "object",
+                            "required": ["upload_token"],
+                            "properties": {
+                                "upload_token": {"type": "string"}
+                            }
+                        }
+                    ]
                 },
                 "ProcessTrackRequest": {
                     "type": "object",

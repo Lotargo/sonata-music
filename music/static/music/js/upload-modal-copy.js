@@ -16,12 +16,16 @@ async function refreshLibraryAfterUploadChange() {
     }
 }
 
-async function discardUncommittedUpload(trackId) {
-    if (!trackId) return;
+async function discardUncommittedUpload(uploadToken) {
+    if (!uploadToken) return;
     try {
-        const response = await fetch(`/cancel-upload/${trackId}/`, {
+        const response = await fetch('/cancel-upload/', {
             method: 'DELETE',
-            headers: { 'X-CSRFToken': csrftoken }
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrftoken
+            },
+            body: JSON.stringify({ upload_token: uploadToken })
         });
         if (!response.ok && response.status !== 404 && response.status !== 409) {
             console.warn('Pending upload cleanup failed:', response.statusText);
@@ -193,14 +197,15 @@ closeUploadModal = async function(options = {}) {
     if (uploadModalCloseInProgress) return;
 
     const discardPending = options?.discardPending !== false;
-    const pendingTrackId = currentUploadTrackId;
-    const shouldDiscard = discardPending && pendingTrackId && !uploadModalCommitted;
+    const pendingUploadToken = currentUploadToken;
+    const shouldDiscard = discardPending && pendingUploadToken && !uploadModalCommitted;
 
     uploadModalCloseInProgress = true;
-    if (shouldDiscard) await discardUncommittedUpload(pendingTrackId);
     uploadModalCommitted = true;
     originalCloseUploadModal();
     uploadModalCloseInProgress = false;
+
+    if (shouldDiscard) await discardUncommittedUpload(pendingUploadToken);
 };
 
 const originalShowConfigUI = showConfigUI;
@@ -224,7 +229,7 @@ resetUpload = function() {
 
 const originalStartProcessing = startProcessing;
 startProcessing = async function() {
-    if (!currentUploadTrackId) return;
+    if (!currentUploadToken) return;
     ensureUploadBitrateOptions();
     uploadModalCommitted = true;
     const result = await originalStartProcessing();

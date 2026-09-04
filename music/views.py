@@ -4,11 +4,15 @@ import mimetypes
 import threading
 import json
 import logging
+import shutil
+import uuid
+from pathlib import Path
 from urllib.parse import unquote
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse, HttpResponse, FileResponse, StreamingHttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.conf import settings
+from django.core import signing
 from django.core.files.storage import default_storage
 from django.views.decorators.csrf import csrf_exempt
 from django.contrib.auth import get_user_model, login
@@ -33,6 +37,9 @@ QUALITY_STEPS = {
     'balanced': 50,
     'high': 100,
 }
+STAGED_UPLOAD_SALT = 'music.staged-upload'
+STAGED_UPLOAD_MAX_AGE = 24 * 60 * 60
+STAGED_UPLOAD_DIRECTORY = 'pending_uploads'
 
 
 def clamp(value, minimum, maximum):
@@ -136,6 +143,91 @@ def delete_track_files(track):
             pass
 
 
+def _staged_upload_payload(token):
+    if not isinstance(token, str) or not token:
+        raise ValueError('Upload token is required.')
+
+    try:
+        payload = signing.loads(
+            token,
+            salt=STAGED_UPLOAD_SALT,
+            max_age=STAGED_UPLOAD_MAX_AGE,
+        )
+    except signing.SignatureExpired as exc:
+        raise ValueError('Upload expired. Please select the file again.') from exc
+    except signing.BadSignature as exc:
+        raise ValueError('Invalid upload token.') from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError('Invalid upload token.')
+
+    upload_id = payload.get('upload_id')
+    audio_name = payload.get('audio_name')
+    expected_prefix = f'{STAGED_UPLOAD_DIRECTORY}/{upload_id}/'
+    if not upload_id or not audio_name or not audio_name.replace('\\', '/').startswith(expected_prefix):
+        raise ValueError('Invalid upload token.')
+    return payload
+
+
+def _discard_staged_upload(payload):
+    for field in ('audio_name', 'cover_name'):
+        name = payload.get(field)
+        if name and default_storage.exists(name):
+            default_storage.delete(name)
+
+    try:
+        stage_dir = Path(settings.MEDIA_ROOT) / STAGED_UPLOAD_DIRECTORY / payload['upload_id']
+        shutil.rmtree(stage_dir, ignore_errors=True)
+    except (KeyError, OSError):
+        pass
+
+
+def _commit_staged_upload(token, title=None, artist=None, status='pending'):
+    payload = _staged_upload_payload(token)
+    audio_name = payload['audio_name']
+    if not default_storage.exists(audio_name):
+        raise ValueError('Upload is no longer available. Please select the file again.')
+
+    committed_names = []
+    track = None
+    try:
+        destination = os.path.join('uploads', payload['original_filename'])
+        with default_storage.open(audio_name, 'rb') as staged_audio:
+            committed_audio = default_storage.save(destination, staged_audio)
+        committed_names.append(committed_audio)
+
+        committed_cover = None
+        cover_name = payload.get('cover_name')
+        if cover_name and default_storage.exists(cover_name):
+            cover_destination = os.path.join('covers', os.path.basename(cover_name))
+            with default_storage.open(cover_name, 'rb') as staged_cover:
+                committed_cover = default_storage.save(cover_destination, staged_cover)
+            committed_names.append(committed_cover)
+
+        track = Track.objects.create(
+            audio_file=committed_audio,
+            cover_image=committed_cover,
+            status=status,
+            title=(title if title is not None else payload.get('title')) or payload['original_filename'],
+            artist=(artist if artist is not None else payload.get('artist')) or 'Unknown Artist',
+            bpm=payload.get('bpm'),
+            musical_key=payload.get('musical_key'),
+            spectral_centroid=payload.get('spectral_centroid'),
+            duration=payload.get('duration'),
+        )
+    except Exception:
+        if track is not None:
+            delete_track_files(track)
+            track.delete()
+        else:
+            for name in committed_names:
+                default_storage.delete(name)
+        raise
+
+    _discard_staged_upload(payload)
+    return track
+
+
 def normalize_processing_payload(data):
     mode = data.get('mode', 'ai')
     if mode not in PROCESSING_MODES:
@@ -236,65 +328,124 @@ def upload(request):
     if not audio_file.name:
         return JsonResponse({"error": "No selected file"}, status=400)
 
-    # Save initial track to get a file path
-    # We create a pending track
-    track = Track(
-        audio_file=audio_file,
-        status='pending',
-        title=audio_file.name, # Temporary title
-        artist='Unknown Artist'
+    upload_id = uuid.uuid4().hex
+    original_filename = os.path.basename(audio_file.name)
+    staged_name = default_storage.save(
+        os.path.join(STAGED_UPLOAD_DIRECTORY, upload_id, original_filename),
+        audio_file,
     )
-    track.save()
+    staged_cover = None
 
     # Extract metadata
-    # track.audio_file.path gives the absolute path
     try:
-        meta = extract_metadata(track.audio_file.path)
-
-        if meta.get('title'):
-            track.title = meta['title']
-        if meta.get('artist'):
-            track.artist = meta['artist']
-        if meta.get('cover_path'):
-            # Assign relative path to ImageField
-            track.cover_image = meta['cover_path']
+        staged_path = default_storage.path(staged_name)
+        stage_dir = os.path.dirname(staged_path)
+        meta = extract_metadata(staged_path, output_dir=stage_dir)
+        title = meta.get('title') or original_filename
+        artist = meta.get('artist') or 'Unknown Artist'
+        staged_cover = meta.get('cover_path')
 
         # Acoustic Analysis: BPM, Musical Key, Spectral Centroid, Duration
+        acoustics = {}
         try:
             from .services.analyzer import analyze_track_acoustics
-            acoustics = analyze_track_acoustics(track.audio_file.path)
-            if acoustics.get('bpm') is not None:
-                track.bpm = acoustics['bpm']
-            if acoustics.get('musical_key'):
-                track.musical_key = acoustics['musical_key']
-            if acoustics.get('spectral_centroid') is not None:
-                track.spectral_centroid = acoustics['spectral_centroid']
-            if acoustics.get('duration') is not None:
-                track.duration = acoustics['duration']
+            acoustics = analyze_track_acoustics(staged_path)
         except Exception as ac_err:
             logger.warning(f"Acoustic analysis failed during upload: {ac_err}")
 
-        track.save()
+        token_payload = {
+            'upload_id': upload_id,
+            'audio_name': staged_name.replace('\\', '/'),
+            'cover_name': staged_cover,
+            'original_filename': original_filename,
+            'title': title,
+            'artist': artist,
+            'bpm': acoustics.get('bpm'),
+            'musical_key': acoustics.get('musical_key'),
+            'spectral_centroid': acoustics.get('spectral_centroid'),
+            'duration': acoustics.get('duration'),
+        }
+        upload_token = signing.dumps(token_payload, salt=STAGED_UPLOAD_SALT, compress=True)
 
         return JsonResponse({
-            'id': track.id,
-            'title': track.title,
-            'display_title': track.display_title,
-            'artist': track.artist,
-            'cover_url': track.cover_url,
-            'audio_url': track.audio_file.url,
-            'filename': os.path.basename(track.audio_file.name),
-            'bpm': track.bpm,
-            'musical_key': track.musical_key,
-            'spectral_centroid': track.spectral_centroid,
-            'duration': track.duration,
+            'upload_token': upload_token,
+            'title': title,
+            'display_title': title,
+            'artist': artist,
+            'cover_url': default_storage.url(staged_cover) if staged_cover else None,
+            'audio_url': default_storage.url(staged_name),
+            'filename': original_filename,
+            'bpm': acoustics.get('bpm'),
+            'musical_key': acoustics.get('musical_key'),
+            'spectral_centroid': acoustics.get('spectral_centroid'),
+            'duration': acoustics.get('duration'),
         }, status=201)
 
     except Exception as e:
         logger.error(f"Error in upload/metadata extraction: {e}")
-        delete_track_files(track)
-        track.delete()
+        _discard_staged_upload({
+            'upload_id': upload_id,
+            'audio_name': staged_name,
+            'cover_name': staged_cover,
+        })
         return JsonResponse({'error': str(e)}, status=500)
+
+
+@require_POST
+def process_staged_upload(request):
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    try:
+        params = normalize_processing_payload(data)
+        track = _commit_staged_upload(
+            data.get('upload_token'),
+            title=data.get('title'),
+            artist=data.get('artist'),
+            status='processing',
+        )
+        track.target_format = params['format']
+        track.target_bitrate = params['bitrate']
+        track.save(update_fields=['target_format', 'target_bitrate'])
+
+        thread = threading.Thread(target=run_upscaling_thread, args=(track.id, params))
+        thread.start()
+    except (TypeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    except Exception as exc:
+        logger.error(f"Unable to start staged upload processing: {exc}")
+        if 'track' in locals():
+            delete_track_files(track)
+            track.delete()
+        return JsonResponse({'error': 'Unable to start processing'}, status=500)
+
+    return JsonResponse({
+        'id': track.id,
+        'message': 'Processing started',
+        'status': 'processing',
+    }, status=201)
+
+
+@require_POST
+def commit_staged_upload(request):
+    try:
+        data = json.loads(request.body)
+        track = _commit_staged_upload(
+            data.get('upload_token'),
+            title=data.get('title'),
+            artist=data.get('artist'),
+        )
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except (TypeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+    except Exception as exc:
+        logger.error(f"Unable to commit staged upload: {exc}")
+        return JsonResponse({'error': 'Unable to add track to the library'}, status=500)
+
+    return JsonResponse(track_payload(track), status=201)
 
 
 def run_upscaling_thread(track_id, params):
@@ -512,6 +663,20 @@ def record_play(request, track_id):
     track.play_count += 1
     track.save()
     return JsonResponse({'play_count': track.play_count})
+
+
+@require_http_methods(["DELETE"])
+def cancel_staged_upload(request):
+    try:
+        data = json.loads(request.body)
+        payload = _staged_upload_payload(data.get('upload_token'))
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+    except (TypeError, ValueError) as exc:
+        return JsonResponse({'error': str(exc)}, status=400)
+
+    _discard_staged_upload(payload)
+    return JsonResponse({'message': 'Staged upload discarded'})
 
 
 @require_http_methods(["DELETE"])

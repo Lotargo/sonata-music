@@ -19,6 +19,9 @@ let audioFadeFrame = null;
 let backgroundPlaybackWanted = false;
 let suppressBackgroundResume = false;
 let isScrubbing = false;
+let pendingDeleteTrackId = null;
+let deleteModalLastFocused = null;
+let isDeletingTrack = false;
 
 // Elements
 const audio = document.getElementById('audio-player');
@@ -130,11 +133,11 @@ function trackRowMarkup(track) {
 
     return `
         <article class="track-row group" data-track-row-id="${id}">
-            <button onclick="playTrack(${id})" class="row-play play-btn" data-track-id="${id}" aria-label="Играть">
-                <i data-lucide="play"></i>
-            </button>
             <div class="row-cover">
                 ${coverMarkup(track)}
+                <button type="button" onclick="playTrack(${id})" class="row-play play-btn" data-track-id="${id}" aria-label="Играть" title="Играть">
+                    <i data-lucide="play"></i>
+                </button>
             </div>
             <div class="row-main">
                 <h3 title="${title}" data-track-title>${title}</h3>
@@ -237,11 +240,15 @@ function setupAudioAnalysis() {
         if (analyser) return;
 
         analyser = audioContext.createAnalyser();
-        analyser.fftSize = 128;
+        analyser.fftSize = 2048;
         analyser.smoothingTimeConstant = 0.85;
         frequencyData = new Uint8Array(analyser.frequencyBinCount);
         mediaSource = audioContext.createMediaElementSource(audio);
-        mediaSource.connect(analyser);
+        if (window.playerEqualizer && typeof window.playerEqualizer.connect === 'function') {
+            window.playerEqualizer.connect(audioContext, mediaSource, analyser);
+        } else {
+            mediaSource.connect(analyser);
+        }
         analyser.connect(audioContext.destination);
     } catch (e) {
         console.warn('AudioContext / Analyser setup skipped:', e);
@@ -406,17 +413,22 @@ function startVisualizationLoop() {
 }
 
 function updateListPlayButtons(id, playing) {
-    if (!id) return;
-    const btns = document.querySelectorAll(`.play-btn[data-track-id="${id}"]`);
-    btns.forEach(btn => {
-        btn.innerHTML = playing
+    const activeId = id == null ? null : String(id);
+
+    document.querySelectorAll('.play-btn').forEach(btn => {
+        const isCurrent = activeId !== null && btn.dataset.trackId === activeId;
+        const isPaused = isCurrent && !playing;
+        const label = isCurrent && playing ? 'Пауза' : (isPaused ? 'Продолжить' : 'Играть');
+
+        btn.classList.toggle('is-current', isCurrent);
+        btn.classList.toggle('is-playing', isCurrent && playing);
+        btn.setAttribute('aria-label', label);
+        btn.title = label;
+        btn.innerHTML = isCurrent && playing
             ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
             : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     });
-    document.querySelectorAll(`.play-btn:not([data-track-id="${id}"])`).forEach(btn => {
-        btn.innerHTML = '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
-    });
-    lucide.createIcons();
+    if (window.lucide) lucide.createIcons();
 }
 
 // Events
@@ -799,10 +811,84 @@ window.pauseMainPlayerForComparison = async () => {
     return false;
 };
 
-window.deleteTrack = async (id) => {
-    if (!confirm('Удалить этот трек?')) return;
+function getDeleteTrackTitle(id) {
+    const track = window.tracks.find(item => Number(item.id) === Number(id));
+    if (track) return getTrackTitle(track);
 
+    const rowTitle = document.querySelector(`[data-track-row-id="${Number(id)}"] [data-track-title], [data-track-row-id="${Number(id)}"] h3`);
+    return rowTitle?.textContent?.trim() || 'Без названия';
+}
+
+function resetDeleteConfirmationState() {
+    const submitButton = document.getElementById('delete-confirm-submit');
+    const cancelButton = document.getElementById('delete-confirm-cancel');
+    const errorMessage = document.getElementById('delete-confirm-error');
+
+    isDeletingTrack = false;
+    if (submitButton) {
+        submitButton.disabled = false;
+        submitButton.innerHTML = '<i data-lucide="trash-2"></i><span>Удалить</span>';
+    }
+    if (cancelButton) cancelButton.disabled = false;
+    if (errorMessage) {
+        errorMessage.textContent = '';
+        errorMessage.classList.add('hidden');
+    }
+    if (window.lucide) lucide.createIcons();
+}
+
+function openDeleteConfirmation(id) {
     const numericId = Number(id);
+    const modal = document.getElementById('delete-confirm-modal');
+    if (!modal || !Number.isFinite(numericId)) return;
+
+    pendingDeleteTrackId = numericId;
+    deleteModalLastFocused = document.activeElement;
+    resetDeleteConfirmationState();
+
+    const trackName = document.getElementById('delete-confirm-track-name');
+    if (trackName) trackName.textContent = getDeleteTrackTitle(numericId);
+
+    modal.classList.remove('hidden');
+    document.getElementById('delete-confirm-cancel')?.focus();
+}
+
+window.closeDeleteConfirmation = (force = false) => {
+    if (isDeletingTrack && !force) return;
+
+    const modal = document.getElementById('delete-confirm-modal');
+    modal?.classList.add('hidden');
+    pendingDeleteTrackId = null;
+    resetDeleteConfirmationState();
+
+    if (deleteModalLastFocused instanceof HTMLElement) deleteModalLastFocused.focus();
+    deleteModalLastFocused = null;
+};
+
+window.handleDeleteConfirmBackdrop = (event) => {
+    if (event.target === event.currentTarget) closeDeleteConfirmation();
+};
+
+window.deleteTrack = (id) => {
+    openDeleteConfirmation(id);
+};
+
+window.confirmTrackDeletion = async () => {
+    if (isDeletingTrack || pendingDeleteTrackId === null) return;
+
+    const numericId = pendingDeleteTrackId;
+    const submitButton = document.getElementById('delete-confirm-submit');
+    const cancelButton = document.getElementById('delete-confirm-cancel');
+    const errorMessage = document.getElementById('delete-confirm-error');
+
+    isDeletingTrack = true;
+    if (submitButton) {
+        submitButton.disabled = true;
+        submitButton.innerHTML = '<i data-lucide="loader-2" class="animate-spin"></i><span>Удаляю...</span>';
+    }
+    if (cancelButton) cancelButton.disabled = true;
+    if (window.lucide) lucide.createIcons();
+
     try {
         if (currentTrackId === numericId) {
             await releaseCurrentTrackForDeletion();
@@ -828,13 +914,30 @@ window.deleteTrack = async (id) => {
         }
 
         window.tracks = window.tracks.filter(track => Number(track.id) !== numericId);
+        closeDeleteConfirmation(true);
         renderLibraryFromTracks(true);
         await fetchLibrary({ render: true });
     } catch(e) {
         console.error(e);
-        alert('Не удалось удалить трек: ' + e.message);
+        isDeletingTrack = false;
+        if (submitButton) {
+            submitButton.disabled = false;
+            submitButton.innerHTML = '<i data-lucide="trash-2"></i><span>Повторить</span>';
+        }
+        if (cancelButton) cancelButton.disabled = false;
+        if (errorMessage) {
+            errorMessage.textContent = 'Не удалось удалить трек: ' + e.message;
+            errorMessage.classList.remove('hidden');
+        }
+        if (window.lucide) lucide.createIcons();
     }
 };
+
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    const modal = document.getElementById('delete-confirm-modal');
+    if (modal && !modal.classList.contains('hidden')) closeDeleteConfirmation();
+});
 
 // Hero Stage Sync & State Management
 function getCurrentTrack() {

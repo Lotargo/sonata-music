@@ -38,13 +38,6 @@
     <div class="track-table">
         {% for track in tracks %}
         <article class="track-row">
-            <button type="button"
-                    onclick="playTrack(Number(this.dataset.trackId))"
-                    class="row-play play-btn"
-                    data-track-id="{{ track.id }}"
-                    aria-label="Играть">
-                <i data-lucide="play"></i>
-            </button>
             <div class="row-cover">
                 {% if track.has_cover %}
                     <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
@@ -52,6 +45,14 @@
                 {% else %}
                     <i data-lucide="music"></i>
                 {% endif %}
+                <button type="button"
+                        onclick="playTrack(Number(this.dataset.trackId))"
+                        class="row-play play-btn"
+                        data-track-id="{{ track.id }}"
+                        aria-label="Играть"
+                        title="Играть">
+                    <i data-lucide="play"></i>
+                </button>
             </div>
             <div class="row-main">
                 <h3 title="{{ track.display_title }}">{{ track.display_title|default:"Без названия" }}</h3>

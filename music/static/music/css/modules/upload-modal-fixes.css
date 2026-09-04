@@ -24,9 +24,7 @@
     top: 0 !important;
     z-index: 60 !important;
     isolation: isolate;
-    background:
-        linear-gradient(135deg, rgba(255, 210, 30, .09), rgba(255, 170, 0, .03)),
-        rgba(14, 14, 14, .95) !important;
+    background: rgba(11, 12, 14, .96) !important;
     backdrop-filter: blur(22px) saturate(1.08) !important;
     -webkit-backdrop-filter: blur(22px) saturate(1.08) !important;
 }
@@ -39,7 +37,7 @@
     bottom: -20px;
     height: 20px;
     pointer-events: none;
-    background: linear-gradient(180deg, rgba(8, 8, 8, .62), transparent);
+    background: linear-gradient(180deg, rgba(8, 9, 11, .5), transparent);
     z-index: -1;
 }
 
@@ -65,12 +63,12 @@
 #upload-modal select option:checked,
 #upload-modal select option:hover {
     background-color: #262626 !important;
-    color: var(--yellow) !important;
+    color: #fff !important;
 }
 
 #target-bitrate:empty {
     background:
-        linear-gradient(135deg, rgba(255, 210, 30, .06), rgba(255, 255, 255, .025)),
+        linear-gradient(135deg, rgba(255, 255, 255, .065), rgba(255, 255, 255, .025)),
         rgba(26, 26, 26, .98) !important;
 }
 

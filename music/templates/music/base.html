@@ -13,7 +13,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=53">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=62">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -107,8 +107,14 @@
     <div id="details-modal-container">
         {% include 'music/components/details_modal.html' %}
     </div>
+    <div id="equalizer-modal-container">
+        {% include 'music/components/equalizer_modal.html' %}
+    </div>
     <div id="register-modal-container">
         {% include 'music/components/register_modal.html' %}
+    </div>
+    <div id="delete-confirm-modal-container">
+        {% include 'music/components/delete_confirm_modal.html' %}
     </div>
 
     <audio id="audio-player" class="hidden" preload="metadata" crossorigin="anonymous"></audio>
@@ -170,7 +176,7 @@
             <!-- Right: Queue, Sliders/Settings, Volume -->
             <div class="player-extra">
                 <button class="player-icon" title="Очередь" aria-label="Очередь"><i data-lucide="list-music"></i></button>
-                <button class="player-icon" onclick="if(currentTrackId) openDetails(currentTrackId);" title="Эквалайзер и параметры" aria-label="Эквалайзер и параметры"><i data-lucide="sliders-horizontal"></i></button>
+                <button id="equalizer-trigger" type="button" class="player-icon eq-trigger" onclick="openEqualizer()" title="Эквалайзер" aria-label="Открыть эквалайзер" aria-controls="equalizer-modal" aria-haspopup="dialog"><i data-lucide="sliders-horizontal"></i></button>
                 <div class="volume-control">
                     <button id="mute-btn" class="volume-mute" type="button" title="Выключить звук" aria-label="Выключить звук">
                         <i data-lucide="volume-2"></i>
@@ -218,11 +224,12 @@
         setVisualEnergy(0.18);
     </script>
 
-    <script src="{% static 'music/js/upload.js' %}?v=6"></script>
-    <script src="{% static 'music/js/upload-modal-copy.js' %}?v=3"></script>
+    <script src="{% static 'music/js/upload.js' %}?v=7"></script>
+    <script src="{% static 'music/js/upload-modal-copy.js' %}?v=5"></script>
     <script src="{% static 'music/js/details.js' %}?v=4"></script>
     <script src="{% static 'music/js/auth.js' %}?v=1"></script>
-    <script src="{% static 'music/js/player.js' %}?v=16"></script>
+    <script src="{% static 'music/js/player.js' %}?v=19"></script>
+    <script src="{% static 'music/js/equalizer.js' %}?v=2"></script>
     <script src="{% static 'music/js/track-display.js' %}?v=2"></script>
     <script src="{% static 'music/js/comparison-audio-guard.js' %}?v=2"></script>
 </body>

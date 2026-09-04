@@ -1,5 +1,5 @@
 // Global state
-let currentUploadTrackId = null;
+let currentUploadToken = null;
 let currentUploadFlow = 'library';
 
 // --- Modal Controls ---
@@ -21,6 +21,12 @@ function closeUploadModal() {
     // Animate out (optional, skipping for simplicity)
     modal.classList.add('hidden');
     resetUpload();
+}
+
+function handleUploadModalBackdrop(event) {
+    if (event.target === event.currentTarget) {
+        closeUploadModal();
+    }
 }
 
 function configureUploadFlow() {
@@ -121,7 +127,7 @@ async function handleFileSelect(file) {
 
         if (response.ok) {
             const track = await response.json();
-            currentUploadTrackId = track.id;
+            currentUploadToken = track.upload_token;
             showConfigUI(track);
         } else {
             // Robust error handling for non-JSON responses
@@ -226,7 +232,7 @@ function showConfigUI(track) {
 
 function resetUpload() {
     // Reset Vars
-    currentUploadTrackId = null;
+    currentUploadToken = null;
 
     // Safely clear file input if it exists (it might be gone if loading spinner is shown)
     const fileInput = document.getElementById('file-input');
@@ -252,8 +258,8 @@ function resetUploadUI() {
     const dz = document.getElementById('drop-zone');
     dz.classList.remove('hidden', 'pointer-events-none');
     dz.innerHTML = `
-        <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-4 group-hover:scale-110 transition">
-            <i data-lucide="music" class="w-8 h-8 text-yellow-400"></i>
+        <div class="upload-note-orb w-16 h-16 rounded-full mx-auto mb-4 group-hover:scale-105 transition">
+            <i data-lucide="music" class="upload-note-icon w-8 h-8"></i>
         </div>
         <p class="text-xl font-bold mb-2">Перетащите файл или выберите вручную</p>
         <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG, M4A, Opus до 50MB</p>
@@ -780,7 +786,7 @@ function updateBitrateOptions() {
 // --- Submit ---
 
 async function startProcessing() {
-    if (!currentUploadTrackId) return;
+    if (!currentUploadToken) return;
 
     const btn = document.getElementById('start-process-btn');
     btn.disabled = true;
@@ -796,13 +802,13 @@ async function startProcessing() {
 
     if (!shouldProcess) {
         try {
-            const response = await fetch(`/edit/${currentUploadTrackId}/`, {
-                method: 'PATCH',
+            const response = await fetch('/commit-upload/', {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'X-CSRFToken': csrftoken
                 },
-                body: JSON.stringify({ title, artist })
+                body: JSON.stringify({ upload_token: currentUploadToken, title, artist })
             });
 
             if (!response.ok) throw new Error(response.statusText);
@@ -826,6 +832,7 @@ async function startProcessing() {
 
     // Collect Data
     const payload = {
+        upload_token: currentUploadToken,
         title,
         artist,
         mode: document.getElementById('processing-mode').value,
@@ -855,7 +862,7 @@ async function startProcessing() {
     };
 
     try {
-        const response = await fetch(`/process/${currentUploadTrackId}/`, {
+        const response = await fetch('/process-upload/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

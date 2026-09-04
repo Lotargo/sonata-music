@@ -5,11 +5,20 @@ from .models import Track, UserProfile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch
 import json
+import tempfile
+from pathlib import Path
+from django.test import override_settings
 
 from .views import normalize_processing_payload
 
 class ViewTests(TestCase):
     def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.media_directory.name)
+        self.media_override.enable()
+        self.addCleanup(self.media_directory.cleanup)
+        self.addCleanup(self.media_override.disable)
+
         self.client = Client()
         # Mock file for file field
         self.track = Track.objects.create(
@@ -207,6 +216,48 @@ class ViewTests(TestCase):
         self.assertContains(self.client.get(reverse('index')), 'id="player-bar"')
         self.assertNotContains(self.client.get(reverse('account')), 'id="player-bar"')
 
+    def test_upload_modal_supports_close_button_and_backdrop(self):
+        response = self.client.get(reverse('index'))
+        self.assertContains(response, 'onclick="closeUploadModal()"')
+        self.assertContains(response, 'onclick="handleUploadModalBackdrop(event)"')
+        self.assertContains(response, 'class="upload-note-icon w-8 h-8"')
+        self.assertContains(response, 'music/js/upload.js?v=7')
+        self.assertContains(response, 'music/js/upload-modal-copy.js?v=5')
+
+    def test_delete_uses_custom_confirmation_modal(self):
+        response = self.client.get(reverse('index'))
+        self.assertContains(response, 'id="delete-confirm-modal"')
+        self.assertContains(response, 'id="delete-confirm-track-name"')
+        self.assertContains(response, 'onclick="confirmTrackDeletion()"')
+        self.assertContains(response, 'music/css/style.css?v=62')
+        self.assertContains(response, 'music/js/player.js?v=19')
+        self.assertNotContains(response, "confirm('Удалить этот трек?')")
+
+    def test_track_play_button_is_rendered_inside_cover(self):
+        response = self.client.get(reverse('index'))
+        html = response.content.decode()
+        cover_start = html.index('<div class="row-cover">')
+        cover_end = html.index('</div>', cover_start)
+        play_button = html.index('class="row-play play-btn"', cover_start)
+
+        self.assertLess(play_button, cover_end)
+        self.assertContains(response, 'music/css/style.css?v=62')
+        self.assertContains(response, 'music/js/player.js?v=19')
+
+    def test_player_equalizer_has_dedicated_modal_and_audio_controls(self):
+        response = self.client.get(reverse('index'))
+
+        self.assertContains(response, 'id="equalizer-trigger"')
+        self.assertContains(response, 'onclick="openEqualizer()"')
+        self.assertContains(response, 'id="equalizer-modal"')
+        self.assertContains(response, 'id="equalizer-band-grid"')
+        self.assertContains(response, 'id="equalizer-spectrum-canvas"')
+        self.assertContains(response, 'id="equalizer-bass-enabled"')
+        self.assertContains(response, 'id="equalizer-clarity-enabled"')
+        self.assertContains(response, 'id="equalizer-compressor-enabled"')
+        self.assertContains(response, 'music/js/equalizer.js?v=2')
+        self.assertNotContains(response, 'onclick="if(currentTrackId) openDetails(currentTrackId);"')
+
     def test_toggle_like(self):
         response = self.client.post(reverse('toggle_like', args=[self.track.id]))
         self.assertEqual(response.status_code, 200)
@@ -333,4 +384,120 @@ class ViewTests(TestCase):
         track.refresh_from_db()
         self.assertFalse(track.is_liked)
         self.assertFalse(track.is_disliked)
+
+
+class StagedUploadTests(TestCase):
+    def setUp(self):
+        self.media_directory = tempfile.TemporaryDirectory()
+        self.media_override = override_settings(MEDIA_ROOT=self.media_directory.name)
+        self.media_override.enable()
+
+    def tearDown(self):
+        self.media_override.disable()
+        self.media_directory.cleanup()
+
+    def upload_draft(self, filename='draft.wav'):
+        with (
+            patch('music.views.extract_metadata', return_value={
+                'title': 'Draft title',
+                'artist': 'Draft artist',
+                'cover_path': None,
+            }),
+            patch('music.services.analyzer.analyze_track_acoustics', return_value={
+                'bpm': 120.0,
+                'musical_key': 'C major',
+                'spectral_centroid': 2400.0,
+                'duration': 30.0,
+            }),
+        ):
+            return self.client.post(
+                reverse('upload'),
+                {'audio_file': SimpleUploadedFile(filename, b'draft-audio')},
+            )
+
+    def test_upload_is_staged_without_creating_library_record(self):
+        response = self.upload_draft()
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(Track.objects.count(), 0)
+        self.assertIn('upload_token', response.json())
+        self.assertNotIn('id', response.json())
+        self.assertEqual(self.client.get(reverse('library_api')).json(), [])
+        self.assertTrue(any(Path(self.media_directory.name, 'pending_uploads').rglob('draft.wav')))
+
+    def test_closing_modal_discards_staged_file_without_database_cleanup(self):
+        upload_response = self.upload_draft()
+        token = upload_response.json()['upload_token']
+
+        response = self.client.delete(
+            reverse('cancel_staged_upload'),
+            data=json.dumps({'upload_token': token}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(Track.objects.count(), 0)
+        pending_root = Path(self.media_directory.name, 'pending_uploads')
+        self.assertFalse(pending_root.exists() and any(pending_root.rglob('*')))
+
+    def test_processing_modes_create_track_only_when_processing_starts(self):
+        for mode in ('dsp', 'ai', 'hybrid'):
+            with self.subTest(mode=mode):
+                upload_response = self.upload_draft(f'{mode}.wav')
+                token = upload_response.json()['upload_token']
+                count_before = Track.objects.count()
+
+                with patch('music.views.threading.Thread') as thread_cls:
+                    response = self.client.post(
+                        reverse('process_staged_upload'),
+                        data=json.dumps({
+                            'upload_token': token,
+                            'title': f'{mode} title',
+                            'artist': 'Test artist',
+                            'mode': mode,
+                            'format': 'wav',
+                        }),
+                        content_type='application/json',
+                    )
+
+                self.assertEqual(response.status_code, 201)
+                self.assertEqual(Track.objects.count(), count_before + 1)
+                track = Track.objects.get(id=response.json()['id'])
+                self.assertEqual(track.status, 'processing')
+                self.assertEqual(track.title, f'{mode} title')
+                self.assertTrue(track.has_audio_file)
+                thread_cls.assert_called_once()
+                thread_cls.return_value.start.assert_called_once()
+                _, params = thread_cls.call_args.kwargs['args']
+                self.assertEqual(params['mode'], mode)
+
+    def test_failed_thread_start_does_not_leave_library_record(self):
+        upload_response = self.upload_draft()
+        token = upload_response.json()['upload_token']
+
+        with patch('music.views.threading.Thread') as thread_cls:
+            thread_cls.return_value.start.side_effect = RuntimeError('thread unavailable')
+            response = self.client.post(
+                reverse('process_staged_upload'),
+                data=json.dumps({
+                    'upload_token': token,
+                    'mode': 'dsp',
+                    'format': 'wav',
+                }),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 500)
+        self.assertEqual(Track.objects.count(), 0)
+        self.assertEqual(self.client.get(reverse('library_api')).json(), [])
+
+    def test_processing_requires_staged_upload_token(self):
+        response = self.client.post(
+            reverse('process_staged_upload'),
+            data=json.dumps({'mode': 'dsp', 'format': 'wav'}),
+            content_type='application/json',
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(Track.objects.count(), 0)
 

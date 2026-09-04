@@ -1,0 +1,144 @@
+<div id="equalizer-modal" class="equalizer-modal hidden" onclick="handleEqualizerBackdrop(event)" aria-hidden="true">
+    <section class="equalizer-dialog" role="dialog" aria-modal="true" aria-labelledby="equalizer-title" tabindex="-1">
+        <header class="equalizer-head">
+            <div class="equalizer-heading">
+                <span class="equalizer-mark" aria-hidden="true"><i data-lucide="audio-lines"></i></span>
+                <div>
+                    <div class="equalizer-title-line">
+                        <h2 id="equalizer-title">Эквалайзер</h2>
+                        <span class="equalizer-live-badge">Real-time DSP</span>
+                    </div>
+                    <p>Настройка звука применяется сразу во время воспроизведения</p>
+                </div>
+            </div>
+            <button type="button" class="equalizer-close" onclick="closeEqualizer()" aria-label="Закрыть эквалайзер" title="Закрыть">
+                <i data-lucide="x"></i>
+            </button>
+        </header>
+
+        <div class="equalizer-toolbar">
+            <label class="equalizer-power" for="equalizer-enabled">
+                <input id="equalizer-enabled" type="checkbox">
+                <span class="equalizer-switch" aria-hidden="true"></span>
+                <span>
+                    <strong>Обработка</strong>
+                    <small id="equalizer-power-label">Выключена</small>
+                </span>
+            </label>
+
+            <label class="equalizer-preset">
+                <span>Пресет</span>
+                <select id="equalizer-preset" aria-label="Пресет эквалайзера">
+                    <option value="flat">Flat</option>
+                    <option value="rock">Rock</option>
+                    <option value="electronic">Electronic</option>
+                    <option value="vocal">Vocal Boost</option>
+                    <option value="bass">Bass Heavy</option>
+                    <option value="acoustic">Acoustic</option>
+                    <option value="air">Air Highs</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </label>
+
+            <button id="equalizer-reset" type="button" class="equalizer-reset">
+                <i data-lucide="rotate-ccw"></i>
+                <span>Сбросить</span>
+            </button>
+        </div>
+
+        <div class="equalizer-tabs" role="tablist" aria-label="Режим эквалайзера">
+            <button id="equalizer-tab-classic" type="button" class="is-active" role="tab" aria-selected="true" aria-controls="equalizer-classic">
+                <i data-lucide="sliders-vertical"></i>
+                10 полос
+            </button>
+            <button id="equalizer-tab-spectrum" type="button" role="tab" aria-selected="false" aria-controls="equalizer-spectrum">
+                <i data-lucide="waveform"></i>
+                Спектр
+            </button>
+        </div>
+
+        <div class="equalizer-content">
+            <section id="equalizer-classic" class="equalizer-panel" role="tabpanel" aria-labelledby="equalizer-tab-classic">
+                <div id="equalizer-band-grid" class="equalizer-band-grid" aria-label="Полосы эквалайзера"></div>
+            </section>
+
+            <section id="equalizer-spectrum" class="equalizer-panel hidden" role="tabpanel" aria-labelledby="equalizer-tab-spectrum">
+                <div class="equalizer-spectrum-shell">
+                    <canvas id="equalizer-spectrum-canvas" aria-label="Интерактивная частотная характеристика"></canvas>
+                    <div class="equalizer-spectrum-hint">Перетаскивайте точки · колесо меняет Q</div>
+                </div>
+                <div class="equalizer-node-editor">
+                    <div>
+                        <span>Точка</span>
+                        <strong id="equalizer-node-number">1</strong>
+                    </div>
+                    <label>
+                        <span>Тип</span>
+                        <select id="equalizer-node-type">
+                            <option value="peaking">Bell</option>
+                            <option value="highpass">Low Cut</option>
+                            <option value="lowshelf">Low Shelf</option>
+                            <option value="highshelf">High Shelf</option>
+                            <option value="notch">Notch</option>
+                        </select>
+                    </label>
+                    <label>
+                        <span>Частота</span>
+                        <input id="equalizer-node-frequency" type="number" min="20" max="20000" step="1" inputmode="numeric">
+                    </label>
+                    <label>
+                        <span>Gain</span>
+                        <input id="equalizer-node-gain" type="number" min="-12" max="12" step="0.1" inputmode="decimal">
+                    </label>
+                    <label class="equalizer-q-control">
+                        <span>Q <b id="equalizer-node-q-value">1.00</b></span>
+                        <input id="equalizer-node-q" type="range" min="0.2" max="12" step="0.05" value="1">
+                    </label>
+                </div>
+            </section>
+
+            <section class="equalizer-enhancers" aria-label="Дополнительная обработка">
+                <article class="equalizer-effect-card">
+                    <div class="equalizer-effect-head">
+                        <span class="equalizer-effect-icon"><i data-lucide="waves"></i></span>
+                        <div><strong>Bass Boost</strong><small>Плотность диапазона 40–80 Гц</small></div>
+                        <label class="equalizer-mini-toggle"><input id="equalizer-bass-enabled" type="checkbox"><span></span></label>
+                    </div>
+                    <div class="equalizer-effect-range">
+                        <input id="equalizer-bass" type="range" min="0" max="12" step="0.5" value="0" aria-label="Bass Boost">
+                        <output id="equalizer-bass-value">0 dB</output>
+                    </div>
+                </article>
+
+                <article class="equalizer-effect-card">
+                    <div class="equalizer-effect-head">
+                        <span class="equalizer-effect-icon"><i data-lucide="mic-2"></i></span>
+                        <div><strong>Voice Clarity</strong><small>Чёткость вокала 1–3.5 кГц</small></div>
+                        <label class="equalizer-mini-toggle"><input id="equalizer-clarity-enabled" type="checkbox"><span></span></label>
+                    </div>
+                    <div class="equalizer-effect-range">
+                        <input id="equalizer-clarity" type="range" min="0" max="8" step="0.5" value="0" aria-label="Voice Clarity">
+                        <output id="equalizer-clarity-value">0 dB</output>
+                    </div>
+                </article>
+
+                <article class="equalizer-effect-card">
+                    <div class="equalizer-effect-head">
+                        <span class="equalizer-effect-icon"><i data-lucide="activity"></i></span>
+                        <div><strong>Compressor</strong><small>Плотность и контроль динамики</small></div>
+                        <label class="equalizer-mini-toggle"><input id="equalizer-compressor-enabled" type="checkbox"><span></span></label>
+                    </div>
+                    <div class="equalizer-effect-range">
+                        <input id="equalizer-compressor" type="range" min="0" max="100" step="1" value="35" aria-label="Компрессор">
+                        <output id="equalizer-compressor-value">35%</output>
+                    </div>
+                </article>
+            </section>
+        </div>
+
+        <footer class="equalizer-foot">
+            <span><i data-lucide="cpu"></i> Обработка выполняется локально через Web Audio API</span>
+            <span id="equalizer-context-status">Готов к воспроизведению</span>
+        </footer>
+    </section>
+</div>

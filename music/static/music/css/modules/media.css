@@ -148,7 +148,7 @@
     }
 
     .track-row {
-        grid-template-columns: 30px 42px minmax(0, 1fr) auto;
+        grid-template-columns: 42px minmax(0, 1fr) auto;
     }
 
     .track-row .status-badge,
