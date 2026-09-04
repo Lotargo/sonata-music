@@ -12,7 +12,7 @@
     <script src="https://unpkg.com/wavesurfer.js@7"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
 
-    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=44">
+    <link rel="stylesheet" href="{% static 'music/css/style.css' %}?v=45">
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -118,7 +118,9 @@
             <div class="progress-track" id="progress-track" onclick="seek(event)" role="slider" aria-label="Перемотка" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" tabindex="0">
                 <div id="progress-bar" class="progress-bar-fill">
                     <span class="progress-thumb"></span>
+                    <span id="scrub-tooltip" class="scrub-tooltip">0:00</span>
                 </div>
+                <span id="scrub-duration" class="scrub-duration">0:00</span>
             </div>
 
             <!-- Left: Now Playing -->
@@ -130,16 +132,9 @@
                     </div>
                 </div>
                 <div class="player-meta">
-                    <div class="player-meta-title-row">
-                        <h4 id="player-title">Выберите трек</h4>
-                        <button id="player-details-btn" class="player-meta-more" onclick="if(currentTrackId) openDetails(currentTrackId);" title="Подробнее о треке" aria-label="Подробнее о треке">
-                            <i data-lucide="more-horizontal"></i>
-                        </button>
-                    </div>
+                    <h4 id="player-title"></h4>
                     <div class="player-meta-sub">
-                        <span id="player-artist">Музыка ждёт</span>
-                        <span class="player-meta-dot">•</span>
-                        <span class="player-meta-time"><span id="current-time">0:00</span> / <span id="duration">0:00</span></span>
+                        <span id="player-artist"></span>
                     </div>
                 </div>
             </div>
@@ -233,7 +228,7 @@
     <script src="{% static 'music/js/details.js' %}?v=4"></script>
     <script src="{% static 'music/js/auth.js' %}?v=1"></script>
     {% if request.resolver_match.url_name == 'index' %}
-        <script src="{% static 'music/js/player.js' %}?v=13"></script>
+        <script src="{% static 'music/js/player.js' %}?v=14"></script>
         <script src="{% static 'music/js/track-display.js' %}?v=1"></script>
         <script src="{% static 'music/js/comparison-audio-guard.js' %}?v=1"></script>
     {% endif %}

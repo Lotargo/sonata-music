@@ -27,6 +27,9 @@ const progressTrack = document.getElementById('progress-track');
 const progressBar = document.getElementById('progress-bar');
 const currentTimeEl = document.getElementById('current-time');
 const durationEl = document.getElementById('duration');
+const scrubTooltip = document.getElementById('scrub-tooltip');
+const scrubDuration = document.getElementById('scrub-duration');
+const playerBar = document.getElementById('player-bar');
 const volumeSlider = document.getElementById('volume-slider');
 const playerTitle = document.getElementById('player-title');
 const playerArtist = document.getElementById('player-artist');
@@ -255,10 +258,13 @@ function loadTrack(track) {
     cancelAudioFade();
     audio.src = url;
 
+    if (playerBar) playerBar.classList.add('has-track');
     playerTitle.textContent = getTrackTitle(track);
-    playerArtist.textContent = track.artist || 'Unknown Artist';
+    playerArtist.textContent = track.artist || 'Неизвестный исполнитель';
     if (currentTimeEl) currentTimeEl.textContent = '0:00';
     if (durationEl) durationEl.textContent = formatTime(track.duration || 0);
+    if (scrubTooltip) scrubTooltip.textContent = '0:00';
+    if (scrubDuration) scrubDuration.textContent = formatTime(track.duration || 0);
     if (progressBar) progressBar.style.width = '0%';
 
     if (track.cover_path) {
@@ -355,8 +361,11 @@ async function releaseCurrentTrackForDeletion() {
     audio.load();
     currentTrackId = null;
     setIsPlaying(false);
-    playerTitle.textContent = 'Выберите трек';
-    playerArtist.textContent = 'Музыка ждёт';
+    if (playerBar) playerBar.classList.remove('has-track');
+    playerTitle.textContent = '';
+    playerArtist.textContent = '';
+    if (scrubTooltip) scrubTooltip.textContent = '0:00';
+    if (scrubDuration) scrubDuration.textContent = '0:00';
     playerCover.classList.add('hidden');
     playerCoverPlaceholder.classList.remove('hidden');
 }
@@ -428,6 +437,8 @@ audio.addEventListener('timeupdate', () => {
     if (!audio.duration || isNaN(audio.duration)) return;
     const percent = Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100));
     if (progressBar) progressBar.style.width = `${percent}%`;
+    if (scrubTooltip) scrubTooltip.textContent = formatTime(audio.currentTime);
+    if (scrubDuration) scrubDuration.textContent = formatTime(audio.duration || 0);
     if (currentTimeEl) currentTimeEl.innerText = formatTime(audio.currentTime);
     if (durationEl) durationEl.innerText = formatTime(audio.duration || 0);
     const trackEl = progressTrack || document.getElementById('progress-track');
@@ -435,8 +446,9 @@ audio.addEventListener('timeupdate', () => {
 });
 
 audio.addEventListener('loadedmetadata', () => {
-    if (durationEl && audio.duration && !isNaN(audio.duration)) {
-        durationEl.innerText = formatTime(audio.duration);
+    if (audio.duration && !isNaN(audio.duration)) {
+        if (scrubDuration) scrubDuration.textContent = formatTime(audio.duration);
+        if (durationEl) durationEl.innerText = formatTime(audio.duration);
     }
 });
 
@@ -498,6 +510,34 @@ function updateProgressVisuals(percent, targetTime) {
     if (currentTimeEl && Number.isFinite(targetTime)) {
         currentTimeEl.innerText = formatTime(targetTime);
     }
+    if (scrubTooltip && Number.isFinite(targetTime)) {
+        scrubTooltip.textContent = formatTime(targetTime);
+
+        // Edge protection: prevent tooltip from clipping out on the left edge
+        const trackEl = progressTrack || document.getElementById('progress-track');
+        const trackWidth = trackEl ? trackEl.clientWidth : 800;
+        const currentX = (percentClamped / 100) * trackWidth;
+
+        if (currentX < 24) {
+            const offset = Math.round(24 - currentX);
+            scrubTooltip.style.transform = `translateX(calc(50% + ${offset}px)) translateY(0)`;
+        } else {
+            scrubTooltip.style.transform = '';
+        }
+
+        // Fade out duration badge if thumb approaches the right end to avoid visual overlap
+        if (scrubDuration) {
+            if (trackWidth - currentX < 70) {
+                const fade = Math.max(0, (trackWidth - currentX - 25) / 45);
+                scrubDuration.style.opacity = fade.toFixed(2);
+            } else {
+                scrubDuration.style.opacity = '';
+            }
+        }
+    }
+    if (scrubDuration && audio.duration && !isNaN(audio.duration)) {
+        scrubDuration.textContent = formatTime(audio.duration);
+    }
     const trackEl = progressTrack || document.getElementById('progress-track');
     if (trackEl) {
         trackEl.setAttribute('aria-valuenow', Math.round(percentClamped));
@@ -548,6 +588,9 @@ function initScrubbing() {
             trackEl.releasePointerCapture(e.pointerId);
         } catch (_) {}
 
+        if (scrubTooltip) scrubTooltip.style.transform = '';
+        if (scrubDuration) scrubDuration.style.opacity = '';
+
         applySeek(e);
     };
 
@@ -578,6 +621,16 @@ function initScrubbing() {
         audio.currentTime = nextTime;
         const percent = nextTime / audio.duration;
         updateProgressVisuals(percent, nextTime);
+
+        trackEl.classList.add('is-scrubbing');
+        clearTimeout(trackEl._scrubTimer);
+        trackEl._scrubTimer = setTimeout(() => {
+            if (!isScrubbing) {
+                trackEl.classList.remove('is-scrubbing');
+                if (scrubTooltip) scrubTooltip.style.transform = '';
+                if (scrubDuration) scrubDuration.style.opacity = '';
+            }
+        }, 900);
     });
 }
 
