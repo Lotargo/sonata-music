@@ -62,6 +62,9 @@
                 <button type="button" onclick="openUploadModal('restoration')" class="sidebar-link">
                     <i data-lucide="wand-sparkles"></i><span>Реставрация аудио</span>
                 </button>
+                <a href="{% url 'scalar_docs' %}" class="sidebar-link {% if request.resolver_match.url_name == 'scalar_docs' %}is-active{% endif %}" target="_blank" rel="noopener">
+                    <i data-lucide="code-xml"></i><span>API Docs</span>
+                </a>
             </nav>
 
             <a href="{% url 'account' %}" class="profile-entry {% if request.resolver_match.url_name == 'account' %}is-active{% endif %}">

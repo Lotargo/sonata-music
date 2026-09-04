@@ -20,6 +20,8 @@ urlpatterns = [
     path('karaoke/<int:track_id>/', views.karaoke, name='karaoke'),
     path('api/like/<int:track_id>/', views.toggle_like, name='toggle_like'),
     path('api/play/<int:track_id>/', views.record_play, name='record_play'),
+    path('api/openapi.json', views.openapi_spec, name='openapi_spec'),
+    path('api/docs/', views.scalar_docs, name='scalar_docs'),
 
     # Custom file serving for processed files (no-cache)
     path('library_files/<path:filename>', views.serve_processed_file, name='serve_processed_file'),

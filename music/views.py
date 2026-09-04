@@ -16,6 +16,7 @@ from .account_state import account_payload, clear_guest_profile, get_account_pro
 from .models import Track, UserProfile
 from .services.upscaler import upscaler
 from .services.metadata import extract_metadata
+from .openapi import get_openapi_spec
 
 logger = logging.getLogger(__name__)
 
@@ -611,3 +612,13 @@ def serve_processed_file(request, filename):
     response = FileResponse(open(file_path, 'rb'))
     response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return response
+
+
+def openapi_spec(request):
+    """Serve OpenAPI 3.1.0 specification as JSON."""
+    return JsonResponse(get_openapi_spec(), json_dumps_params={'indent': 2})
+
+
+def scalar_docs(request):
+    """Render Scalar API reference UI."""
+    return render(request, 'music/scalar_docs.html')
