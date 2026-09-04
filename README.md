@@ -39,7 +39,8 @@ Important: this project is still in active development. Some architecture sectio
 
 The long-term architecture roadmap is maintained here:
 
-- `docs/ARCHITECTURE_ROADMAP.md`
+- `docs/ARCHITECTURE_ROADMAP.md` (Backend architecture, infrastructure, data layers)
+- `roadmap.md` (Product direction, audio engineering, libraries, anti-AI watermark removal, audio analytics)
 
 That document is the source of truth for planned backend work: Docker Compose, PostgreSQL, ORM/OGM boundaries, repositories, Unit of Work, Celery workers, Redis/Channels, Kafka KRaft, CQRS-lite, ClickHouse analytics, object storage, auth/subscriptions/quotas, external drives, security, moderation, CI/CD, observability, support tooling, and ADRs.
 

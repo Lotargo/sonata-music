@@ -19,10 +19,10 @@ from .services.metadata import extract_metadata
 
 logger = logging.getLogger(__name__)
 
-PROCESSING_MODES = {'ai', 'dsp', 'hybrid', 'restoration'}
-TARGET_FORMATS = {'wav', 'mp3', 'flac', 'ogg'}
+PROCESSING_MODES = {'ai', 'dsp', 'hybrid', 'restoration', 'direct', 'stealth'}
+TARGET_FORMATS = {'wav', 'mp3', 'flac', 'ogg', 'm4a', 'opus'}
 TARGET_SAMPLE_RATES = {44100, 48000, 96000}
-LOSSY_BITRATES = {'128k', '192k', '256k', '320k', '500k'}
+LOSSY_BITRATES = {'96k', '128k', '160k', '192k', '256k', '320k', '500k'}
 LOSSLESS_DEPTHS = {'16-bit', '24-bit', '32-bit'}
 QUALITY_STEPS = {
     'fast': 25,
@@ -103,6 +103,9 @@ def track_payload(t):
         'target_format': t.target_format,
         'target_bitrate': t.target_bitrate,
         'duration': t.duration,
+        'bpm': t.bpm,
+        'musical_key': t.musical_key,
+        'spectral_centroid': t.spectral_centroid,
         'is_liked': t.is_liked,
         'play_count': t.play_count,
     }
@@ -130,11 +133,17 @@ def normalize_processing_payload(data):
     if sample_rate not in TARGET_SAMPLE_RATES:
         sample_rate = 48000
 
-    bitrate_default = '320k' if target_format in {'mp3', 'ogg'} else '24-bit'
+    if target_format in {'mp3', 'm4a'}:
+        bitrate_default = '320k'
+    elif target_format in {'ogg', 'opus'}:
+        bitrate_default = '160k'
+    else:
+        bitrate_default = '24-bit'
+
     bitrate = str(data.get('bitrate') or bitrate_default)
-    if target_format in {'mp3', 'ogg'}:
-        bitrate = bitrate if bitrate in LOSSY_BITRATES else '320k'
-        if target_format == 'mp3' and bitrate == '500k':
+    if target_format in {'mp3', 'ogg', 'm4a', 'opus'}:
+        bitrate = bitrate if bitrate in LOSSY_BITRATES else bitrate_default
+        if target_format in {'mp3', 'm4a'} and bitrate == '500k':
             bitrate = '320k'
     else:
         bitrate = bitrate if bitrate in LOSSLESS_DEPTHS else '24-bit'
@@ -236,6 +245,21 @@ def upload(request):
             # Assign relative path to ImageField
             track.cover_image = meta['cover_path']
 
+        # Acoustic Analysis: BPM, Musical Key, Spectral Centroid, Duration
+        try:
+            from .services.analyzer import analyze_track_acoustics
+            acoustics = analyze_track_acoustics(track.audio_file.path)
+            if acoustics.get('bpm') is not None:
+                track.bpm = acoustics['bpm']
+            if acoustics.get('musical_key'):
+                track.musical_key = acoustics['musical_key']
+            if acoustics.get('spectral_centroid') is not None:
+                track.spectral_centroid = acoustics['spectral_centroid']
+            if acoustics.get('duration') is not None:
+                track.duration = acoustics['duration']
+        except Exception as ac_err:
+            logger.warning(f"Acoustic analysis failed during upload: {ac_err}")
+
         track.save()
 
         return JsonResponse({
@@ -245,7 +269,11 @@ def upload(request):
             'artist': track.artist,
             'cover_url': track.cover_image.url if track.cover_image else None,
             'audio_url': track.audio_file.url,
-            'filename': os.path.basename(track.audio_file.name)
+            'filename': os.path.basename(track.audio_file.name),
+            'bpm': track.bpm,
+            'musical_key': track.musical_key,
+            'spectral_centroid': track.spectral_centroid,
+            'duration': track.duration,
         }, status=201)
 
     except Exception as e:
@@ -281,7 +309,9 @@ def run_upscaling_thread(track_id, params):
             'ai': '_ai',
             'dsp': '_dsp',
             'hybrid': '_hybrid',
-            'restoration': '_restored'
+            'restoration': '_restored',
+            'direct': '_converted',
+            'stealth': '_stealth',
         }
         suffix = suffix_map.get(mode, '_ai')
         output_filename = f"{base}{suffix}.{target_format}"
@@ -296,26 +326,44 @@ def run_upscaling_thread(track_id, params):
         track.target_bitrate = params.get('bitrate')
         track.save()
 
+        cover_image_path = track.cover_image.path if track.cover_image else None
+
         # Call Service
         success = upscaler.process_track(
             input_path=input_path,
             output_path=output_path,
             mode=mode,
             ddim_steps=int(params.get('steps', 50)),
-            guidance_scale=float(params.get('guidance', 3.5)),
+            guidance_scale=float(params.get('guidance', 1.8)),
             seed=int(params.get('seed', 42)),
             batch_size=int(params.get('batch_size', 2)),
             target_format=target_format,
             target_sample_rate=int(params.get('sample_rate', 48000)),
             target_bitrate=params.get('bitrate', '320k'),
             dsp_preset=params.get('dsp_preset', 'mastering'),
-            dsp_params=params.get('dsp_params')
+            dsp_params=params.get('dsp_params'),
+            title=track.title,
+            artist=track.artist,
+            cover_image_path=cover_image_path,
         )
 
         if success:
             track.status = 'completed'
             # Save relative path to FileField
             track.processed_file.name = os.path.join('processed', output_filename)
+            try:
+                from .services.analyzer import analyze_track_acoustics
+                out_ac = analyze_track_acoustics(output_path)
+                if out_ac.get('duration') is not None:
+                    track.duration = out_ac['duration']
+                if not track.bpm and out_ac.get('bpm'):
+                    track.bpm = out_ac['bpm']
+                if not track.musical_key and out_ac.get('musical_key'):
+                    track.musical_key = out_ac['musical_key']
+                if not track.spectral_centroid and out_ac.get('spectral_centroid'):
+                    track.spectral_centroid = out_ac['spectral_centroid']
+            except Exception as ex:
+                logger.debug(f"Post-processing acoustic update skipped: {ex}")
         else:
             track.status = 'failed'
 
@@ -503,7 +551,44 @@ def get_track_metrics(request, track_id):
         except Exception as e:
             return JsonResponse({'error': f"Failed to read metrics: {str(e)}"}, status=500)
     else:
-        return JsonResponse({'error': 'Metrics file not found'}, status=404)
+        # Dynamic acoustic metrics fallback
+        try:
+            from .services.analyzer import analyze_track_acoustics
+            orig_ac = analyze_track_acoustics(track.audio_file.path) if track.audio_file else {}
+            proc_ac = analyze_track_acoustics(track.processed_file.path) if track.processed_file else {}
+            data = {
+                'file_info': {
+                    'original': {
+                        'filename': track.original_filename,
+                        'format': track.original_filename.split('.')[-1].upper() if '.' in track.original_filename else 'AUDIO',
+                        'sample_rate': '44.1 kHz',
+                        'duration': f"{int(track.duration // 60)}:{int(track.duration % 60):02d}" if track.duration else '-'
+                    },
+                    'processed': {
+                        'filename': track.processed_filename,
+                        'format': track.display_format,
+                        'sample_rate': '48.0 kHz',
+                        'duration': f"{int((proc_ac.get('duration') or track.duration or 0) // 60)}:{int((proc_ac.get('duration') or track.duration or 0) % 60):02d}"
+                    }
+                },
+                'metrics': {
+                    'BPM (Tempo)': {
+                        'original': f"{round(orig_ac.get('bpm'))} BPM" if orig_ac.get('bpm') else '-',
+                        'processed': f"{round(proc_ac.get('bpm') or track.bpm or 0)} BPM" if (proc_ac.get('bpm') or track.bpm) else '-'
+                    },
+                    'Musical Key': {
+                        'original': orig_ac.get('musical_key') or '-',
+                        'processed': proc_ac.get('musical_key') or track.musical_key or '-'
+                    },
+                    'Spectral Centroid': {
+                        'original': f"{round(orig_ac.get('spectral_centroid'))} Hz" if orig_ac.get('spectral_centroid') else '-',
+                        'processed': f"{round(proc_ac.get('spectral_centroid') or track.spectral_centroid or 0)} Hz" if (proc_ac.get('spectral_centroid') or track.spectral_centroid) else '-'
+                    }
+                }
+            }
+            return JsonResponse(data)
+        except Exception as e:
+            return JsonResponse({'error': f"Metrics unavailable: {e}"}, status=404)
 
 
 def library_api(request):

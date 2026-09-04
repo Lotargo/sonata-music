@@ -162,6 +162,52 @@ function showConfigUI(track) {
         coverPlace.classList.remove('hidden');
     }
 
+    // Render Acoustic Badges (BPM, Key, Centroid, Duration)
+    const badgesContainer = document.getElementById('acoustic-badges');
+    const badgeBpm = document.getElementById('badge-bpm');
+    const badgeKey = document.getElementById('badge-key');
+    const badgeCentroid = document.getElementById('badge-centroid');
+    const badgeDuration = document.getElementById('badge-duration');
+
+    if (badgesContainer) {
+        let hasAnyBadge = false;
+        if (track.bpm && badgeBpm) {
+            badgeBpm.textContent = `${track.bpm} BPM`;
+            badgeBpm.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeBpm) {
+            badgeBpm.parentElement.classList.add('hidden');
+        }
+
+        if (track.musical_key && badgeKey) {
+            badgeKey.textContent = track.musical_key;
+            badgeKey.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeKey) {
+            badgeKey.parentElement.classList.add('hidden');
+        }
+
+        if (track.spectral_centroid && badgeCentroid) {
+            badgeCentroid.textContent = `${Math.round(track.spectral_centroid)} Hz`;
+            badgeCentroid.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeCentroid) {
+            badgeCentroid.parentElement.classList.add('hidden');
+        }
+
+        if (track.duration && badgeDuration) {
+            const mins = Math.floor(track.duration / 60);
+            const secs = Math.floor(track.duration % 60).toString().padStart(2, '0');
+            badgeDuration.textContent = `${mins}:${secs}`;
+            badgeDuration.parentElement.classList.remove('hidden');
+            hasAnyBadge = true;
+        } else if (badgeDuration) {
+            badgeDuration.parentElement.classList.add('hidden');
+        }
+
+        badgesContainer.classList.toggle('hidden', !hasAnyBadge);
+    }
+
     // Init Logic
     if (currentUploadFlow === 'library') {
         if (document.getElementById('library-enhance-quality')?.checked) {
@@ -206,10 +252,11 @@ function resetUploadUI() {
             <i data-lucide="music" class="w-8 h-8 text-yellow-400"></i>
         </div>
         <p class="text-xl font-bold mb-2">Перетащите файл или выберите вручную</p>
-        <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG до 50MB</p>
+        <p class="text-slate-400 text-sm">MP3, WAV, FLAC, OGG, M4A, Opus до 50MB</p>
         <input type="file" id="file-input" class="hidden" accept="audio/*">
     `;
     document.getElementById('upload-config').classList.add('hidden');
+    document.getElementById('acoustic-badges')?.classList.add('hidden');
     lucide.createIcons();
     bindDropZone();
     configureUploadFlow();
@@ -221,7 +268,7 @@ function setUploadMode(mode) {
     document.getElementById('processing-mode').value = mode;
 
     // Update Buttons
-    ['ai', 'hybrid', 'restoration', 'dsp'].forEach(m => {
+    ['direct', 'stealth', 'ai', 'hybrid', 'restoration', 'dsp'].forEach(m => {
         const btn = document.getElementById(`mode-${m}`);
         if (!btn) return;
         if (m === mode) {
@@ -239,7 +286,15 @@ function setUploadMode(mode) {
     const modeDesc = document.getElementById('mode-desc');
     const dspLabel = document.getElementById('dsp-label');
 
-    if (mode === 'ai') {
+    if (mode === 'direct') {
+        aiSettings.classList.add('hidden');
+        dspSettings.classList.add('hidden');
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Конвертация:</span> прямое быстрое перекодирование без изменения звука нейросетями или DSP.`;
+    } else if (mode === 'stealth') {
+        aiSettings.classList.add('hidden');
+        dspSettings.classList.add('hidden');
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Anti-AI Stealth:</span> разрушение водяных знаков, устранение коробочности (350 Гц), мягкий де-харш, стерео-мастеринг и очистка метаданных.`;
+    } else if (mode === 'ai') {
         aiSettings.classList.remove('hidden');
         dspSettings.classList.remove('hidden');
         dspLabel.textContent = "DSP-подготовка";
@@ -300,7 +355,8 @@ function updateDspPreset() {
         "deep_bass": { stereo: 100, bass: 6, clarity: 1.5, comp: 60, rev: false },
         "clear": { stereo: 110, bass: -2, clarity: 5, comp: 40, rev: false },
         "warm": { stereo: 90, bass: 2, clarity: -1, comp: 60, rev: true, revSize: 30, revMix: 10 },
-        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false }
+        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false },
+        "stealth": { stereo: 115, bass: 0.5, clarity: 1.0, comp: 55, rev: false }
     };
 
     const config = presets[preset];
@@ -384,21 +440,41 @@ function updateBitrateOptions() {
 
     select.innerHTML = '';
 
-    if (format === 'mp3' || format === 'ogg') {
+    if (['mp3', 'ogg', 'm4a', 'opus'].includes(format)) {
         label.innerText = 'Bitrate';
-        const opts = [
-            {v: '128k', t: '128 kbps'},
-            {v: '192k', t: '192 kbps'},
-            {v: '256k', t: '256 kbps'},
-            {v: '320k', t: '320 kbps (High)'}
-        ];
-        if (format === 'ogg') {
-            opts.push({v: '500k', t: '500 kbps (Max)'});
+        let opts = [];
+        if (format === 'opus') {
+            opts = [
+                {v: '96k', t: '96 kbps (Voice/Light)'},
+                {v: '128k', t: '128 kbps'},
+                {v: '160k', t: '160 kbps (High Quality)'},
+                {v: '192k', t: '192 kbps'},
+                {v: '256k', t: '256 kbps (Ultra)'}
+            ];
+        } else if (format === 'm4a') {
+            opts = [
+                {v: '128k', t: '128 kbps (Standard)'},
+                {v: '192k', t: '192 kbps'},
+                {v: '256k', t: '256 kbps (Apple Music / Pro)'},
+                {v: '320k', t: '320 kbps (Max)'}
+            ];
+        } else {
+            opts = [
+                {v: '128k', t: '128 kbps'},
+                {v: '192k', t: '192 kbps'},
+                {v: '256k', t: '256 kbps'},
+                {v: '320k', t: '320 kbps (High)'}
+            ];
+            if (format === 'ogg') {
+                opts.push({v: '500k', t: '500 kbps (Max)'});
+            }
         }
+
+        const defaultVal = format === 'opus' ? '160k' : (format === 'm4a' ? '256k' : '320k');
         opts.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.v; opt.text = o.t;
-            if(o.v === '320k') opt.selected = true;
+            if (o.v === defaultVal) opt.selected = true;
             select.appendChild(opt);
         });
     } else {
@@ -411,7 +487,7 @@ function updateBitrateOptions() {
         opts.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.v; opt.text = o.t;
-            if(o.v === '24-bit') opt.selected = true;
+            if (o.v === '24-bit') opt.selected = true;
             select.appendChild(opt);
         });
     }

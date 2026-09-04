@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import torch
 import torchaudio
 import logging
@@ -177,45 +178,87 @@ class UpscalerService:
                 logger.error(f"Failed to load AudioSR model: {e}")
                 raise e
 
-    def _convert_format(self, input_wav, output_path, target_format, bitrate_str):
-        """Helper to convert WAV to other formats using pydub."""
+    def _convert_format(
+        self,
+        input_wav,
+        output_path,
+        target_format,
+        bitrate_str,
+        title=None,
+        artist=None,
+        album=None,
+        cover_image_path=None,
+        **metadata_kwargs,
+    ):
+        """Helper to convert audio to other formats using pydub/ffmpeg, then embed clean metadata."""
+        target_format = str(target_format).lower().strip()
         logger.info(
             f"Converting to {target_format} (bitrate/depth: {bitrate_str}) using pydub"
         )
-        audio = AudioSegment.from_wav(input_wav)
+        audio = AudioSegment.from_file(input_wav)
 
-        format_map = {"mp3": "mp3", "flac": "flac", "ogg": "ogg", "vorbis": "ogg"}
-        out_fmt = format_map.get(target_format.lower(), target_format.lower())
+        format_map = {
+            "mp3": "mp3",
+            "flac": "flac",
+            "ogg": "ogg",
+            "vorbis": "ogg",
+            "m4a": "m4a",
+            "aac": "m4a",
+            "opus": "opus",
+            "wav": "wav",
+        }
+        out_fmt = format_map.get(target_format, target_format)
 
         # Handle Bitrate clamping for lossy formats
-        if out_fmt in ["mp3", "ogg"]:
-            # Parse numerical bitrate
+        if out_fmt in ["mp3", "ogg", "m4a", "opus"]:
             try:
-                # Remove 'k' and convert to int
-                kbps = int("".join(filter(str.isdigit, bitrate_str)))
+                kbps = int("".join(filter(str.isdigit, str(bitrate_str))))
             except ValueError:
-                kbps = 320  # Default fallback
+                kbps = 320 if out_fmt in ["mp3", "m4a"] else 160
 
-            # Clamp limits
             if out_fmt == "mp3":
                 kbps = min(kbps, 320)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting MP3 with bitrate {final_bitrate}")
+                audio.export(output_path, format="mp3", bitrate=final_bitrate)
             elif out_fmt == "ogg":
                 kbps = min(kbps, 500)
-
-            final_bitrate = f"{kbps}k"
-            logger.info(f"Exporting {out_fmt} with bitrate {final_bitrate}")
-            audio.export(output_path, format=out_fmt, bitrate=final_bitrate)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting OGG with bitrate {final_bitrate}")
+                audio.export(output_path, format="ogg", bitrate=final_bitrate)
+            elif out_fmt == "m4a":
+                kbps = min(kbps, 320)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting M4A (AAC) with bitrate {final_bitrate}")
+                audio.export(output_path, format="mp4", codec="aac", bitrate=final_bitrate)
+            elif out_fmt == "opus":
+                kbps = min(kbps, 256)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting Opus with bitrate {final_bitrate}")
+                audio.export(output_path, format="opus", codec="libopus", bitrate=final_bitrate)
 
         elif out_fmt == "flac":
-            # FLAC is lossless, bitrate arg doesn't apply to compression level directly in pydub/ffmpeg simple interface
-            # We just export as FLAC. Pydub doesn't expose sample_fmt easily for export,
-            # but input was saved as 24-bit WAV if possible, so FLAC should retain high quality.
-            logger.info(f"Exporting {out_fmt} (lossless)")
+            logger.info(f"Exporting FLAC (lossless)")
+            audio.export(output_path, format="flac")
+        elif out_fmt == "wav":
+            logger.info(f"Exporting WAV")
+            audio.export(output_path, format="wav")
+        else:
             audio.export(output_path, format=out_fmt)
 
-        else:
-            # Fallback
-            audio.export(output_path, format=out_fmt)
+        # Clean and embed metadata
+        try:
+            from music.services.metadata import clean_and_embed_metadata
+            clean_and_embed_metadata(
+                output_path,
+                title=title,
+                artist=artist,
+                album=album,
+                cover_image_path=cover_image_path,
+                **metadata_kwargs,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to clean/embed metadata for {output_path}: {e}")
 
     def unload_model(self):
         """Unloads the model and frees VRAM/RAM."""
@@ -250,10 +293,17 @@ class UpscalerService:
 
         pad = window_size // 2
 
-        # Helper to compute envelope
+        # Helper to compute envelope (accelerated on GPU if available)
+        calc_device = "cuda" if torch.cuda.is_available() else source.device
+        orig_device = source.device
+
         def compute_envelope(waveform, win_size, padding):
-            squared = waveform**2
-            squared = squared.unsqueeze(0)
+            w_dev = waveform.to(calc_device)
+            squared = w_dev**2
+            if squared.dim() == 1:
+                squared = squared.unsqueeze(0).unsqueeze(0)
+            elif squared.dim() == 2:
+                squared = squared.unsqueeze(0)
             envelope = torch.nn.functional.avg_pool1d(
                 squared,
                 kernel_size=win_size,
@@ -261,8 +311,8 @@ class UpscalerService:
                 padding=padding,
                 count_include_pad=False,
             )
-            envelope = torch.sqrt(envelope + 1e-8)
-            return envelope.squeeze(0)
+            envelope = torch.sqrt(envelope + 1e-8).squeeze(0)
+            return envelope.to(orig_device)
 
         env_source = compute_envelope(source, window_size, pad)
         env_target = compute_envelope(target, window_size, pad)
@@ -292,6 +342,80 @@ class UpscalerService:
             f"RMS Match: Source={rms_source:.4f}, Target={rms_target:.4f}, Gain={gain:.4f}"
         )
         return target * gain
+
+    def _apply_crossover_injection(
+        self, original, upscaled, sr, crossover_hz=15500, air_gain=0.75
+    ):
+        """
+        High-Frequency Linkwitz-Riley 4th-Order (LR4) Zero-Phase Crossover Injection:
+        1. Low band (< crossover_hz): Extracted purely from the original audio using zero-phase
+           bidirectional Butterworth filtering (sosfiltfilt), preserving 100% of original vocal
+           timbre, phase relationships, stereo width, and natural dynamics.
+        2. High band (> crossover_hz): Extracted from AudioSR super-resolution, isolating synthesized
+           harmonic overtones and high-frequency air (> 15.5 kHz).
+        3. Zero phase distortion & zero double-summing: LR4 ensures |H_lp|^2 + |H_hp|^2 = 1.0 everywhere,
+           completely eliminating comb-filtering, flanging, and distortion in the 14-16 kHz transition zone.
+        4. Soft-limiting on air: Softly clamps high-frequency spikes with tanh and applies gentle air_gain
+           to prevent diffusion noise sizzle.
+        """
+        try:
+            logger.info(
+                f"Applying HF LR4 Zero-Phase Crossover Injection (Crossover: {crossover_hz} Hz, Air Gain: {air_gain})..."
+            )
+            from scipy.signal import butter, sosfiltfilt
+
+            # Match lengths
+            min_len = min(original.shape[-1], upscaled.shape[-1])
+            orig = original[..., :min_len]
+            up = upscaled[..., :min_len]
+
+            nyquist = sr / 2.0
+            norm_cutoff = min(crossover_hz / nyquist, 0.95)
+
+            # 2nd-order Butterworth SOS -> bidirectional filtering (sosfiltfilt) produces
+            # exactly 4th-order Linkwitz-Riley (LR4) with zero phase shift: |H_lp|^2 + |H_hp|^2 = 1
+            sos_lp = butter(2, norm_cutoff, btype="low", output="sos")
+            sos_hp = butter(2, norm_cutoff, btype="high", output="sos")
+
+            orig_np = orig.detach().cpu().numpy().astype(np.float64)
+            up_np = up.detach().cpu().numpy().astype(np.float64)
+
+            # Zero-phase crossover split
+            low_band = sosfiltfilt(sos_lp, orig_np, axis=-1)
+            high_band = sosfiltfilt(sos_hp, up_np, axis=-1)
+
+            # Soft-limit and scale high-frequency air to prevent diffusion sizzle / crackle
+            if air_gain != 1.0:
+                high_band = np.tanh(high_band * air_gain)
+            else:
+                high_band = np.tanh(high_band)
+
+            # Natural Air Stereo Spreader: If stereo, give newly synthesized air (>15.5k)
+            # a three-dimensional room dimension instead of a pinpoint mono center.
+            # Collapses to EXACT 0 in mono summing (100% mono compatible, zero comb-filtering).
+            if high_band.shape[0] == 2:
+                delay_samples = 12  # ~0.25ms at 48kHz
+                high_r_delayed = np.roll(high_band[1], delay_samples)
+                high_r_delayed[:delay_samples] = 0.0
+                side_air = (high_band[0] - high_r_delayed) * 0.35
+                high_band[0] = high_band[0] + side_air
+                high_band[1] = high_band[1] - side_air
+
+            blended_np = low_band + high_band
+
+            # Peak safety check to prevent digital overs
+            max_val = np.max(np.abs(blended_np))
+            if max_val > 0.99:
+                blended_np = blended_np / max_val * 0.98
+
+            blended = torch.from_numpy(blended_np.astype(np.float32)).to(
+                orig.device, dtype=orig.dtype
+            )
+            return blended
+        except Exception as e:
+            logger.warning(f"Crossover injection fallback to direct upscaled: {e}")
+            return upscaled
+
 
     def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
@@ -533,7 +657,7 @@ class UpscalerService:
         output_path,
         mode="ai",
         ddim_steps=50,
-        guidance_scale=3.5,
+        guidance_scale=1.8,
         seed=42,
         target_format="wav",
         target_sample_rate=48000,
@@ -541,15 +665,41 @@ class UpscalerService:
         batch_size=2,
         dsp_preset="mastering",
         dsp_params=None,
+        title=None,
+        artist=None,
+        album=None,
+        cover_image_path=None,
+        **metadata_kwargs,
     ):
         """
         Upscale/Process the audio file at input_path and save to output_path.
-        Modes: 'ai' (AudioSR), 'dsp' (Studio DSP), or 'hybrid' (Stem Separation + DSP).
+        Modes: 'direct' (Pass-through / Fast conversion), 'stealth' (Anti-AI Restoration),
+               'ai' (AudioSR), 'dsp' (Studio DSP), or 'hybrid' (Stem Separation + DSP).
         """
         try:
             logger.info(f"Starting processing ({mode}): {input_path} -> {output_path}")
 
             temp_wav = None
+
+            # --- DIRECT MODE (Fast Conversion / Passthrough / No AI / No DSP) ---
+            if mode == "direct":
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                self._convert_format(
+                    input_path,
+                    output_path,
+                    target_format,
+                    target_bitrate,
+                    title=title,
+                    artist=artist,
+                    album=album,
+                    cover_image_path=cover_image_path,
+                    **metadata_kwargs,
+                )
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                    logger.error(f"Direct mode failed: Output file {output_path} is missing or empty.")
+                    return False
+                logger.info(f"Direct conversion complete: {output_path}")
+                return True
 
             # --- DSP MODE ---
             if mode == "dsp":
@@ -577,11 +727,26 @@ class UpscalerService:
                         )
                     else:
                         self._convert_format(
-                            temp_wav, output_path, target_format, target_bitrate
+                            temp_wav,
+                            output_path,
+                            target_format,
+                            target_bitrate,
+                            title=title,
+                            artist=artist,
+                            album=album,
+                            cover_image_path=cover_image_path,
+                            **metadata_kwargs,
                         )
                         # Cleanup temp
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
+                else:
+                    # Clean/embed metadata for WAV
+                    try:
+                        from music.services.metadata import clean_and_embed_metadata
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path, **metadata_kwargs)
+                    except Exception as e:
+                        logger.warning(f"Metadata embedding for WAV failed: {e}")
 
                 # Verify output before return
                 if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
@@ -672,26 +837,39 @@ class UpscalerService:
                         )
                     else:
                         self._convert_format(
-                            temp_wav, output_path, target_format, target_bitrate
+                            temp_wav,
+                            output_path,
+                            target_format,
+                            target_bitrate,
+                            title=title,
+                            artist=artist,
+                            album=album,
+                            cover_image_path=cover_image_path,
+                            **metadata_kwargs,
                         )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
+                else:
+                    try:
+                        from music.services.metadata import clean_and_embed_metadata
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path, **metadata_kwargs)
+                    except Exception as e:
+                        logger.warning(f"Metadata embedding for WAV failed: {e}")
 
                 # Generate metrics before return
                 self._generate_metrics_report(input_path, output_path)
                 return True
 
-            # --- RESTORATION MODE (Suno Enhancer: Demucs Filter + DSP) ---
-            if mode == "restoration":
-                logger.info("Starting Suno Restoration Pipeline...")
+            # --- RESTORATION & STEALTH MODE (Demucs Filter + Stealth/Suno Polish) ---
+            if mode in ["restoration", "stealth"]:
+                logger.info(f"Starting {mode.upper()} Restoration Pipeline...")
 
                 if target_format.lower() == "wav":
                     temp_wav = output_path
                 else:
                     temp_wav = output_path + ".tmp.wav"
 
-                # 1. Demucs Separation (Re-synthesis)
-                # We separate and recombine to "filter" MP3 artifacts
+                # 1. Demucs Separation (Re-synthesis to break acoustic watermarks)
                 with tempfile.TemporaryDirectory() as stem_dir:
                     logger.info(
                         f"Step 1: Separating stems for re-synthesis into {stem_dir}..."
@@ -706,7 +884,6 @@ class UpscalerService:
                     current_sr = target_sample_rate  # Will update from first stem
 
                     for s_path in stems_map.values():
-                        # Read as float32 to match final_mix dtype and save memory
                         s_data, s_sr = sf.read(s_path, dtype="float32")
                         current_sr = s_sr
 
@@ -725,7 +902,6 @@ class UpscalerService:
                     )
 
                     for s_data in loaded_stems:
-                        # Pad if needed
                         if s_data.shape[1] < max_len:
                             pad = np.zeros(
                                 (s_data.shape[0], max_len - s_data.shape[1]),
@@ -734,65 +910,75 @@ class UpscalerService:
                             s_data = np.concatenate([s_data, pad], axis=1)
                         final_mix += s_data
 
-                # 3. DSP Polish (Suno Specific)
-                logger.info("Step 3: Applying Suno DSP Polish...")
-                polished = dsp.apply_suno_restoration(final_mix, current_sr)
+                # 3. DSP Polish (Stealth / Anti-AI specific)
+                logger.info("Step 3: Applying Stealth DSP Polish...")
+                polished = dsp.apply_stealth_restoration(final_mix, current_sr)
 
                 # 4. Save Final
-                # Resample if target_sample_rate differs
                 if current_sr != target_sample_rate:
                     import resampy
-
                     polished = resampy.resample(
                         polished, current_sr, target_sample_rate, axis=1
                     )
 
-                # Write
                 sf.write(temp_wav, polished.T, target_sample_rate)
 
                 # Convert
                 if target_format.lower() != "wav":
                     if self.ffmpeg_available:
                         self._convert_format(
-                            temp_wav, output_path, target_format, target_bitrate
+                            temp_wav,
+                            output_path,
+                            target_format,
+                            target_bitrate,
+                            title=title,
+                            artist=artist,
+                            album=album,
+                            cover_image_path=cover_image_path,
+                            **metadata_kwargs,
                         )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
+                else:
+                    try:
+                        from music.services.metadata import clean_and_embed_metadata
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path, **metadata_kwargs)
+                    except Exception as e:
+                        logger.warning(f"Metadata embedding for WAV failed: {e}")
 
                 # Generate metrics before return
                 self._generate_metrics_report(input_path, output_path)
                 return True
 
             # --- AI MODE ---
-            # 1. DSP Pre-processing (Clean & Level before AI)
-            # This helps reduce AI hallucinations by feeding it a cleaner, leveled signal.
+            # 1. Optional DSP Pre-processing: only run if caller explicitly passed custom dsp_params
             dsp_temp_wav = None
-            try:
-                logger.info("Step 1: Running DSP Pre-processing for AI...")
-                if target_format.lower() == "wav":
-                    dsp_temp_wav = output_path + ".dsp_pre.wav"
-                else:
-                    dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
+            if dsp_params:
+                try:
+                    logger.info("Step 1: Running custom DSP Pre-processing for AI...")
+                    if target_format.lower() == "wav":
+                        dsp_temp_wav = output_path + ".dsp_pre.wav"
+                    else:
+                        dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
 
-                # Apply DSP (EQ, Comp, Limiter) to input
-                # We force 48kHz here to match AudioSR expectation, saving a resample step later
-                dsp.process(
-                    input_path,
-                    dsp_temp_wav,
-                    preset_name=dsp_preset,
-                    params=dsp_params,
-                    sample_rate=48000,
-                )
+                    # Apply custom DSP (EQ, Comp, Limiter) to input
+                    dsp.process(
+                        input_path,
+                        dsp_temp_wav,
+                        preset_name=dsp_preset,
+                        params=dsp_params,
+                        sample_rate=48000,
+                    )
 
-                # Update input_path to use the cleaned file for the rest of the pipeline
-                input_path = dsp_temp_wav
+                    # Update input_path to use the cleaned file for the rest of the pipeline
+                    input_path = dsp_temp_wav
 
-            except Exception as e:
-                logger.error(f"DSP Pre-processing failed: {e}")
-                # Fallback to original input if DSP fails
-                if dsp_temp_wav and os.path.exists(dsp_temp_wav):
-                    os.remove(dsp_temp_wav)
-                dsp_temp_wav = None
+                except Exception as e:
+                    logger.error(f"DSP Pre-processing failed: {e}")
+                    # Fallback to original input if DSP fails
+                    if dsp_temp_wav and os.path.exists(dsp_temp_wav):
+                        os.remove(dsp_temp_wav)
+                    dsp_temp_wav = None
 
             self.load_model()
 
@@ -894,6 +1080,13 @@ class UpscalerService:
                     waveform, upscaled_waveform, sr, window_ms=100
                 )
 
+                # --- High-Frequency Crossover Injection (Spectral Recovery) ---
+                # Retains 100% of original vocal timbre, phase coherence, and dynamics below 15.5 kHz.
+                # Only injects newly synthesized harmonic air > 15.5 kHz from AudioSR with LR4 zero-phase crossover.
+                upscaled_waveform = self._apply_crossover_injection(
+                    waveform, upscaled_waveform, sr, crossover_hz=15500, air_gain=0.75
+                )
+
             logger.info(
                 f"Generated waveform shape: {upscaled_waveform.shape}, dtype: {upscaled_waveform.dtype}, device: {upscaled_waveform.device}"
             )
@@ -953,7 +1146,15 @@ class UpscalerService:
                     )
                 else:
                     self._convert_format(
-                        temp_wav, output_path, target_format, target_bitrate
+                        temp_wav,
+                        output_path,
+                        target_format,
+                        target_bitrate,
+                        title=title,
+                        artist=artist,
+                        album=album,
+                        cover_image_path=cover_image_path,
+                        **metadata_kwargs,
                     )
                     if (
                         temp_wav
