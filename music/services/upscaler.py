@@ -334,6 +334,41 @@ class UpscalerService:
         )
         return target * gain
 
+    def _apply_crossover_injection(self, original, upscaled, sr, crossover_hz=14000):
+        """
+        High-Frequency Crossover Injection (Spectral Recovery):
+        Retains 100% of original signal below crossover_hz (pristine vocal acoustics,
+        zero phase cancellation, zero comb-filtering, natural body).
+        Only injects synthesized harmonic overtones and air (> crossover_hz) from AudioSR.
+        """
+        try:
+            logger.info(f"Applying HF Crossover Injection (Crossover: {crossover_hz} Hz)...")
+            from scipy.signal import butter, sosfilt
+
+            # Match lengths
+            min_len = min(original.shape[-1], upscaled.shape[-1])
+            orig = original[..., :min_len]
+            up = upscaled[..., :min_len]
+
+            nyquist = sr / 2.0
+            norm_cutoff = min(crossover_hz / nyquist, 0.95)
+
+            # Highpass filter on the newly synthesized AudioSR signal
+            sos_hp = butter(4, norm_cutoff, btype='high', output='sos')
+
+            up_np = up.detach().cpu().numpy()
+            hf_air = sosfilt(sos_hp, up_np, axis=-1)
+
+            # Clean injection: original full-range audio + high-frequency synthesized air
+            hf_tensor = torch.from_numpy(hf_air.copy()).to(orig.device, dtype=orig.dtype)
+
+            # Subtle gain scaling on HF air to prevent over-sizzle
+            blended = orig + (hf_tensor * 0.9)
+            return blended
+        except Exception as e:
+            logger.warning(f"Crossover injection fallback to direct upscaled: {e}")
+            return upscaled
+
     def _batched_super_resolution(self, input_files, ddim_steps, guidance_scale, seed):
         """
         Runs super_resolution on a batch of files to maximize GPU usage.
@@ -863,35 +898,34 @@ class UpscalerService:
                 return True
 
             # --- AI MODE ---
-            # 1. DSP Pre-processing (Clean & Level before AI)
-            # This helps reduce AI hallucinations by feeding it a cleaner, leveled signal.
+            # 1. Optional DSP Pre-processing: only run if caller explicitly passed custom dsp_params
             dsp_temp_wav = None
-            try:
-                logger.info("Step 1: Running DSP Pre-processing for AI...")
-                if target_format.lower() == "wav":
-                    dsp_temp_wav = output_path + ".dsp_pre.wav"
-                else:
-                    dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
+            if dsp_params:
+                try:
+                    logger.info("Step 1: Running custom DSP Pre-processing for AI...")
+                    if target_format.lower() == "wav":
+                        dsp_temp_wav = output_path + ".dsp_pre.wav"
+                    else:
+                        dsp_temp_wav = output_path + ".tmp.dsp_pre.wav"
 
-                # Apply DSP (EQ, Comp, Limiter) to input
-                # We force 48kHz here to match AudioSR expectation, saving a resample step later
-                dsp.process(
-                    input_path,
-                    dsp_temp_wav,
-                    preset_name=dsp_preset,
-                    params=dsp_params,
-                    sample_rate=48000,
-                )
+                    # Apply custom DSP (EQ, Comp, Limiter) to input
+                    dsp.process(
+                        input_path,
+                        dsp_temp_wav,
+                        preset_name=dsp_preset,
+                        params=dsp_params,
+                        sample_rate=48000,
+                    )
 
-                # Update input_path to use the cleaned file for the rest of the pipeline
-                input_path = dsp_temp_wav
+                    # Update input_path to use the cleaned file for the rest of the pipeline
+                    input_path = dsp_temp_wav
 
-            except Exception as e:
-                logger.error(f"DSP Pre-processing failed: {e}")
-                # Fallback to original input if DSP fails
-                if dsp_temp_wav and os.path.exists(dsp_temp_wav):
-                    os.remove(dsp_temp_wav)
-                dsp_temp_wav = None
+                except Exception as e:
+                    logger.error(f"DSP Pre-processing failed: {e}")
+                    # Fallback to original input if DSP fails
+                    if dsp_temp_wav and os.path.exists(dsp_temp_wav):
+                        os.remove(dsp_temp_wav)
+                    dsp_temp_wav = None
 
             self.load_model()
 
@@ -991,6 +1025,13 @@ class UpscalerService:
             if upscaled_waveform is not None:
                 upscaled_waveform = self._match_envelope(
                     waveform, upscaled_waveform, sr, window_ms=100
+                )
+
+                # --- High-Frequency Crossover Injection (Spectral Recovery) ---
+                # Retains 100% of original vocal timbre, phase coherence, and dynamics below 14 kHz.
+                # Only injects newly synthesized harmonic air > 14 kHz from AudioSR, eliminating comb-filtering.
+                upscaled_waveform = self._apply_crossover_injection(
+                    waveform, upscaled_waveform, sr, crossover_hz=14000
                 )
 
             logger.info(

@@ -211,9 +211,9 @@ def apply_analog_drift(
     drift_rate: float = 1.0015
 ) -> np.ndarray:
     """
-    Applies microscopic time-stretch (e.g. 0.15% change) to disrupt deterministic
-    AI-generation spectral fingerprinting and hash comparison without noticeable human pitch alteration.
-    audio_data: shape (channels, samples) float32
+    Applies microscopic analog tape varispeed (0.15% speed/pitch drift via bandlimited sinc-resampling)
+    to disrupt deterministic AI spectral hash matches without phase-vocoder artifacts or vocal smearing.
+    audio_data: shape (channels, samples) or (samples,) float32
     """
     try:
         # Clamp drift rate to ultra-safe subtle values (0.998 to 1.002)
@@ -221,18 +221,14 @@ def apply_analog_drift(
         if abs(rate - 1.0) < 0.0001:
             return audio_data
 
-        if audio_data.ndim == 1:
-            return librosa.effects.time_stretch(audio_data, rate=rate).astype(np.float32)
-        elif audio_data.ndim == 2:
-            channels = []
-            for ch in range(audio_data.shape[0]):
-                stretched = librosa.effects.time_stretch(audio_data[ch], rate=rate)
-                channels.append(stretched)
-            # Match lengths if slightly mismatched
-            min_len = min(len(c) for c in channels)
-            aligned = np.stack([c[:min_len] for c in channels], axis=0)
-            return aligned.astype(np.float32)
-        return audio_data
+        # True analog tape varispeed: sinc interpolation preserves 100% stereo phase coherence,
+        # zero comb-filtering, razor-sharp transients, and no "hollow barrel" vocal coloration.
+        import resampy
+        sr_nominal = 100000
+        sr_drifted = int(round(sr_nominal * rate))
+        
+        drifted = resampy.resample(audio_data, sr_drifted, sr_nominal, axis=-1, filter='kaiser_fast')
+        return drifted.astype(np.float32)
     except Exception as e:
         logger.warning(f"[AudioAnalyzer] Analog drift error, keeping original: {e}")
         return audio_data

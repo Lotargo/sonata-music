@@ -473,33 +473,29 @@ class StudioDSP:
             # Pre-gain: -3dB attenuation for headroom
             audio = audio * 0.707
 
-            # 1. Apply Stereo Widener First (NumPy)
-            audio = self._apply_stereo_width(audio, 1.15)
+            # 1. Subtle Stereo Widening (Keep center vocal focused, prevent Mid cancellation)
+            audio = self._apply_stereo_width(audio, 1.05)
 
             # 2. Build Pedalboard Chain
             board = Pedalboard()
 
-            # --- EQ: Cleanup & De-mud ---
-            board.append(HighpassFilter(cutoff_frequency_hz=30))
-            # Cut "Mud" / Boxiness (320-380Hz common in Suno/Udio generation)
-            board.append(PeakFilter(cutoff_frequency_hz=350, gain_db=-2.5, q=1.0))
+            # --- EQ: Cleanup & De-mud (Gentle, narrow Q to preserve vocal body) ---
+            board.append(HighpassFilter(cutoff_frequency_hz=28))
+            board.append(PeakFilter(cutoff_frequency_hz=350, gain_db=-0.8, q=1.4))
 
-            # --- EQ: De-harsh (Cut metallic digital ring on AI vocals/instruments) ---
-            board.append(PeakFilter(cutoff_frequency_hz=4000, gain_db=-2.0, q=1.2))
+            # --- EQ: De-harsh (Subtle suppression of AI digital fizz without dulling consonants) ---
+            board.append(PeakFilter(cutoff_frequency_hz=4200, gain_db=-0.6, q=1.5))
 
-            # --- EQ: Air & Presence ---
-            board.append(HighShelfFilter(cutoff_frequency_hz=10000, gain_db=1.5))
+            # --- EQ: Air & Openness ---
+            board.append(HighShelfFilter(cutoff_frequency_hz=11000, gain_db=1.0))
 
-            # --- Harmonic Exciter ---
-            board.append(Distortion(drive_db=0.4))
-
-            # --- Glue Compressor ---
+            # --- Transparent Mastering Glue Compressor (No pumping, preserves microdynamics) ---
             board.append(
                 Compressor(
-                    threshold_db=-12,
-                    ratio=2.5,
-                    attack_ms=15,
-                    release_ms=150,
+                    threshold_db=-14,
+                    ratio=1.5,
+                    attack_ms=30,
+                    release_ms=200,
                 )
             )
 
