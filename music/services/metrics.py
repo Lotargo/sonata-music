@@ -14,13 +14,22 @@ class MetricsService:
 
     def _calculate_metrics(self, data):
         """
-        Calculates basic audio metrics for a numpy array.
+        Calculates audio metrics for a numpy array, including full stereo L/R analysis.
         data: (samples, channels) or (samples,)
         """
-        if data.ndim == 2:
-            # Mix to mono for simple metrics
+        is_stereo = (data.ndim == 2 and data.shape[1] >= 2)
+
+        if is_stereo:
+            left = data[:, 0]
+            right = data[:, 1]
             mono = np.mean(data, axis=1)
+        elif data.ndim == 2:
+            left = data[:, 0]
+            right = data[:, 0]
+            mono = data[:, 0]
         else:
+            left = data
+            right = data
             mono = data
 
         # Peak Amplitude
@@ -35,11 +44,65 @@ class MetricsService:
         crest_factor = peak / (rms + 1e-9)
         crest_db = 20 * np.log10(crest_factor + 1e-9)
 
+        # Stereo metrics
+        peak_l = np.max(np.abs(left))
+        peak_l_db = 20 * np.log10(peak_l + 1e-9)
+        rms_l = np.sqrt(np.mean(left**2))
+        rms_l_db = 20 * np.log10(rms_l + 1e-9)
+
+        peak_r = np.max(np.abs(right))
+        peak_r_db = 20 * np.log10(peak_r + 1e-9)
+        rms_r = np.sqrt(np.mean(right**2))
+        rms_r_db = 20 * np.log10(rms_r + 1e-9)
+
+        if is_stereo:
+            mid = (left + right) * 0.5
+            side = (left - right) * 0.5
+
+            rms_mid = np.sqrt(np.mean(mid**2))
+            rms_mid_db = 20 * np.log10(rms_mid + 1e-9)
+
+            rms_side = np.sqrt(np.mean(side**2))
+            rms_side_db = 20 * np.log10(rms_side + 1e-9)
+
+            side_peak = np.max(np.abs(side))
+            side_peak_db = 20 * np.log10(side_peak + 1e-9)
+
+            # Pearson correlation coefficient between Left and Right channels
+            std_l = np.std(left)
+            std_r = np.std(right)
+            if std_l > 1e-7 and std_r > 1e-7:
+                corr_matrix = np.corrcoef(left, right)
+                corr = float(corr_matrix[0, 1])
+                if np.isnan(corr):
+                    corr = 1.0 if np.allclose(left, right, atol=1e-5) else 0.0
+            else:
+                corr = 1.0 if np.allclose(left, right, atol=1e-5) else 0.0
+
+            corr = float(np.clip(corr, -1.0, 1.0))
+            stereo_width_ratio = float(rms_side / (rms_mid + 1e-9))
+        else:
+            rms_mid_db = rms_db
+            rms_side_db = -120.0
+            side_peak_db = -120.0
+            corr = 1.0
+            stereo_width_ratio = 0.0
+
         return {
             "peak_db": float(round(peak_db, 2)),
             "rms_db": float(round(rms_db, 2)),
             "dynamic_range_db": float(round(crest_db, 2)),
             "crest_factor": float(round(crest_factor, 2)),
+            "peak_l_db": float(round(peak_l_db, 2)),
+            "peak_r_db": float(round(peak_r_db, 2)),
+            "rms_l_db": float(round(rms_l_db, 2)),
+            "rms_r_db": float(round(rms_r_db, 2)),
+            "rms_mid_db": float(round(rms_mid_db, 2)),
+            "rms_side_db": float(round(rms_side_db, 2)),
+            "side_peak_db": float(round(side_peak_db, 2)),
+            "stereo_correlation": float(round(corr, 3)),
+            "stereo_width_ratio": float(round(stereo_width_ratio, 3)),
+            "is_stereo": bool(is_stereo),
         }
 
     def _file_info(self, path, data, sample_rate):

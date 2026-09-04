@@ -138,13 +138,15 @@
 }
 
 #details-modal #view-split,
-#details-modal #view-overlay {
+#details-modal #view-overlay,
+#details-modal #view-spectrogram {
     border: 0 !important;
     color: rgba(255, 255, 255, .68) !important;
 }
 
 #details-modal #view-split.bg-slate-700,
-#details-modal #view-overlay.bg-slate-700 {
+#details-modal #view-overlay.bg-slate-700,
+#details-modal #view-spectrogram.bg-slate-700 {
     background: linear-gradient(135deg, #ff3300, #cc0000) !important;
     color: #fff !important;
     box-shadow: 0 10px 20px rgba(255, 51, 0, .18) !important;
