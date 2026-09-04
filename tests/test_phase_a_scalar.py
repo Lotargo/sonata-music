@@ -37,6 +37,7 @@ class ScalarApiDocsTests(TestCase):
         response = self.client.get(url)
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertEqual(response.headers.get('Access-Control-Allow-Origin'), '*')
         data = response.json()
         self.assertEqual(data["openapi"], "3.1.0")
         self.assertIn("paths", data)

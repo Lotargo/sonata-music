@@ -616,7 +616,10 @@ def serve_processed_file(request, filename):
 
 def openapi_spec(request):
     """Serve OpenAPI 3.1.0 specification as JSON."""
-    return JsonResponse(get_openapi_spec(), json_dumps_params={'indent': 2})
+    response = JsonResponse(get_openapi_spec(), json_dumps_params={'indent': 2})
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    return response
 
 
 def scalar_docs(request):
