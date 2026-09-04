@@ -87,7 +87,7 @@
 .floating-play svg.lucide-play,
 .row-play svg[data-lucide="play"],
 .row-play svg.lucide-play {
-    transform: translateX(1.5px);
+    transform: none;
 }
 
 .floating-play svg[data-lucide="pause"],

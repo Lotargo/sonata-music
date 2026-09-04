@@ -123,7 +123,7 @@
     border-radius: 50%;
     background:
         linear-gradient(#080808, #080808) padding-box,
-        linear-gradient(135deg, #ff3300, #cc0000) border-box;
+        linear-gradient(135deg, var(--yellow), rgba(255, 210, 30, .45)) border-box;
     border: 2px solid transparent;
     color: #fff;
     overflow: hidden;
@@ -170,8 +170,9 @@
     max-width: 100%;
     padding: 2px 8px 2px 6px;
     border-radius: 999px;
-    background: linear-gradient(135deg, rgba(255, 51, 0, .32), rgba(204, 0, 0, .22));
-    color: #fff;
+    background: linear-gradient(135deg, rgba(255, 210, 30, .25), rgba(255, 170, 0, .14));
+    border: 1px solid rgba(255, 210, 30, .32);
+    color: var(--yellow);
     font-size: 11px;
     font-weight: 850;
     line-height: 1.2;
@@ -185,5 +186,5 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #ff3300, #cc0000);
+    background: linear-gradient(135deg, var(--yellow), #e6a800);
 }

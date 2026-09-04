@@ -4,7 +4,11 @@
     gap: 44px;
     min-height: calc(100vh - 210px);
     padding: 44px;
-    background: #135b56;
+    background:
+        radial-gradient(circle at 30% 30%, rgba(255, 210, 30, .08), transparent 45%),
+        linear-gradient(180deg, #0f0f0f 0%, #060606 100%);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, .06);
 }
 
 .karaoke-art {
