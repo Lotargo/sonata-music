@@ -188,6 +188,7 @@ class UpscalerService:
         artist=None,
         album=None,
         cover_image_path=None,
+        **metadata_kwargs,
     ):
         """Helper to convert audio to other formats using pydub/ffmpeg, then embed clean metadata."""
         target_format = str(target_format).lower().strip()
@@ -254,6 +255,7 @@ class UpscalerService:
                 artist=artist,
                 album=album,
                 cover_image_path=cover_image_path,
+                **metadata_kwargs,
             )
         except Exception as e:
             logger.warning(f"Failed to clean/embed metadata for {output_path}: {e}")
@@ -667,6 +669,7 @@ class UpscalerService:
         artist=None,
         album=None,
         cover_image_path=None,
+        **metadata_kwargs,
     ):
         """
         Upscale/Process the audio file at input_path and save to output_path.
@@ -690,6 +693,7 @@ class UpscalerService:
                     artist=artist,
                     album=album,
                     cover_image_path=cover_image_path,
+                    **metadata_kwargs,
                 )
                 if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
                     logger.error(f"Direct mode failed: Output file {output_path} is missing or empty.")
@@ -731,6 +735,7 @@ class UpscalerService:
                             artist=artist,
                             album=album,
                             cover_image_path=cover_image_path,
+                            **metadata_kwargs,
                         )
                         # Cleanup temp
                         if os.path.exists(temp_wav) and temp_wav != output_path:
@@ -739,7 +744,7 @@ class UpscalerService:
                     # Clean/embed metadata for WAV
                     try:
                         from music.services.metadata import clean_and_embed_metadata
-                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path)
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path, **metadata_kwargs)
                     except Exception as e:
                         logger.warning(f"Metadata embedding for WAV failed: {e}")
 
@@ -840,13 +845,14 @@ class UpscalerService:
                             artist=artist,
                             album=album,
                             cover_image_path=cover_image_path,
+                            **metadata_kwargs,
                         )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
                 else:
                     try:
                         from music.services.metadata import clean_and_embed_metadata
-                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path)
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path, **metadata_kwargs)
                     except Exception as e:
                         logger.warning(f"Metadata embedding for WAV failed: {e}")
 
@@ -929,13 +935,14 @@ class UpscalerService:
                             artist=artist,
                             album=album,
                             cover_image_path=cover_image_path,
+                            **metadata_kwargs,
                         )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
                 else:
                     try:
                         from music.services.metadata import clean_and_embed_metadata
-                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path)
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path, **metadata_kwargs)
                     except Exception as e:
                         logger.warning(f"Metadata embedding for WAV failed: {e}")
 
@@ -1147,6 +1154,7 @@ class UpscalerService:
                         artist=artist,
                         album=album,
                         cover_image_path=cover_image_path,
+                        **metadata_kwargs,
                     )
                     if (
                         temp_wav
