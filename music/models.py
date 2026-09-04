@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.db import models
 import os
+from pathlib import Path
 
 AUDIO_EXTENSIONS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.aiff', '.aif', '.opus')
 
@@ -82,6 +83,7 @@ class Track(models.Model):
 
     # User interactions
     is_liked = models.BooleanField(default=False)
+    is_disliked = models.BooleanField(default=False)
     play_count = models.IntegerField(default=0)
     lyrics = models.TextField(blank=True, null=True)
 
@@ -116,6 +118,48 @@ class Track(models.Model):
         name = self.processed_filename if self.status == 'completed' and self.processed_filename else self.original_filename
         ext = os.path.splitext(name)[1].lstrip('.')
         return ext.upper() if ext else (self.target_format or '').upper()
+
+    @property
+    def has_cover(self):
+        """Checks if the cover image physically exists on disk."""
+        if not self.cover_image or not self.cover_image.name:
+            return False
+        rel_path = self.cover_image.name.replace('\\', '/')
+        file_path = Path(settings.MEDIA_ROOT) / rel_path
+        return file_path.is_file()
+
+    @property
+    def cover_url(self):
+        """Returns the cover image URL if the file exists on disk, otherwise None."""
+        if self.has_cover:
+            try:
+                return self.cover_image.url
+            except Exception:
+                return None
+        return None
+
+    @property
+    def has_audio_file(self):
+        """Checks if the source audio file physically exists on disk."""
+        if not self.audio_file or not self.audio_file.name:
+            return False
+        rel_path = self.audio_file.name.replace('\\', '/')
+        file_path = Path(settings.MEDIA_ROOT) / rel_path
+        return file_path.is_file()
+
+    @property
+    def has_processed_file(self):
+        """Checks if the processed audio file physically exists on disk."""
+        if not self.processed_file or not self.processed_file.name:
+            return False
+        rel_path = self.processed_file.name.replace('\\', '/')
+        file_path = Path(settings.MEDIA_ROOT) / rel_path
+        return file_path.is_file()
+
+    @property
+    def is_available(self):
+        """Returns True if at least one audio representation exists on disk."""
+        return self.has_audio_file or self.has_processed_file
 
     def __str__(self):
         return self.display_title

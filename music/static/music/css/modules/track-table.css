@@ -19,8 +19,10 @@
 }
 
 .row-play {
-    width: 30px;
-    height: 30px;
+    width: 32px;
+    height: 32px;
+    justify-self: center;
+    margin: 0 auto;
 }
 
 .row-cover {

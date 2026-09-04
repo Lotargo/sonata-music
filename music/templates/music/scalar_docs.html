@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Music Upscaler Pro — Interactive API Reference</title>
+    <meta name="description" content="Interactive OpenAPI 3.1 Documentation for Music Upscaler Pro API powered by Scalar" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23f59e0b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polygon points='11 5 6 9 2 9 2 15 6 15 11 19 11 5'></polygon><path d='M15.54 8.46a5 5 0 0 1 0 7.07'></path><path d='M19.07 4.93a10 10 0 0 1 0 14.14'></path></svg>" />
+
+    <!-- Google Fonts Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+
+    <style>
+      :root {
+        --scalar-font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        --scalar-font-code: 'JetBrains Mono', monospace;
+      }
+      body {
+        margin: 0;
+        padding: 0;
+        background-color: #0b0f19;
+        font-family: var(--scalar-font-family);
+        color: #f1f5f9;
+      }
+      .studio-nav-bar {
+        position: sticky;
+        top: 0;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 24px;
+        background: rgba(15, 23, 42, 0.92);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      }
+      .studio-nav-bar a {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        color: #94a3b8;
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        transition: color 0.15s ease;
+      }
+      .studio-nav-bar a:hover {
+        color: #fbbf24;
+      }
+      .studio-nav-bar .logo-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        font-weight: 700;
+        color: #ffffff;
+      }
+      .studio-nav-bar .badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 9999px;
+        background: rgba(245, 158, 11, 0.15);
+        color: #fbbf24;
+        border: 1px solid rgba(245, 158, 11, 0.3);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Studio Header Link Bar -->
+    <header class="studio-nav-bar">
+      <div class="logo-tag">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+        </svg>
+        <span>Music Upscaler Pro</span>
+        <span class="badge">OpenAPI 3.1</span>
+      </div>
+      <div>
+        <a href="/">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Вернуться в студию
+        </a>
+      </div>
+    </header>
+
+    <!-- Scalar API Reference Web Component -->
+    <script
+      id="api-reference"
+      type="application/json"
+      data-url="/api/openapi.json">
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/@scalar/api-reference"></script>
+    <script>
+      const scalarConfig = {
+        theme: 'purple',
+        darkMode: true,
+        showSidebar: true,
+        searchHotKey: 'k',
+        hiddenClients: [],
+        metaData: {
+          title: 'Music Upscaler Pro API Reference'
+        }
+      };
+      const apiRefEl = document.getElementById('api-reference');
+      if (apiRefEl) {
+        apiRefEl.setAttribute('data-configuration', JSON.stringify(scalarConfig));
+      }
+    </script>
+  </body>
+</html>

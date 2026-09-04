@@ -18,27 +18,36 @@ let lastLibrarySignature = '';
 let audioFadeFrame = null;
 let backgroundPlaybackWanted = false;
 let suppressBackgroundResume = false;
+let isScrubbing = false;
 
 // Elements
 const audio = document.getElementById('audio-player');
 const playPauseBtn = document.getElementById('play-pause-btn');
+const progressTrack = document.getElementById('progress-track');
 const progressBar = document.getElementById('progress-bar');
 const currentTimeEl = document.getElementById('current-time');
 const durationEl = document.getElementById('duration');
+const scrubTooltip = document.getElementById('scrub-tooltip');
+const scrubDuration = document.getElementById('scrub-duration');
+const playerBar = document.getElementById('player-bar');
 const volumeSlider = document.getElementById('volume-slider');
 const playerTitle = document.getElementById('player-title');
 const playerArtist = document.getElementById('player-artist');
 const playerCover = document.getElementById('player-cover');
 const playerCoverPlaceholder = document.getElementById('player-cover-placeholder');
 const likeBtn = document.getElementById('like-btn');
-const karaokeLink = document.getElementById('karaoke-link');
+const dislikeBtn = document.getElementById('dislike-btn');
 const muteBtn = document.getElementById('mute-btn');
 let lastNonZeroVolume = 1;
 
 // Init
 async function initPlayer() {
     restoreVolume();
+    initScrubbing();
+    initSeamlessNavigation();
+    initUnloadPersistence();
     await fetchLibrary({ render: true });
+    restoreSessionTrack();
     startLibraryPolling();
     startVisualizationLoop();
     updateMuteButton();
@@ -104,7 +113,7 @@ function getStatusLabel(track) {
 
 function coverMarkup(track, placeholderClass = '') {
     if (track.cover_path) {
-        return `<img src="${escapeHtml(track.cover_path)}" alt="">`;
+        return `<img src="${escapeHtml(track.cover_path)}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');"><div class="${placeholderClass || 'cover-placeholder'} hidden"><i data-lucide="music"></i></div>`;
     }
     return placeholderClass
         ? `<div class="${placeholderClass}"><i data-lucide="music"></i></div>`
@@ -217,25 +226,29 @@ window.playTrack = async (id) => {
 
 function setupAudioAnalysis() {
     if (!window.AudioContext && !window.webkitAudioContext) return;
-    if (analyser) {
+    try {
+        if (!audioContext) {
+            const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+            audioContext = new AudioContextClass();
+        }
         if (audioContext && audioContext.state === 'suspended') {
             audioContext.resume().catch(() => {});
         }
-        return;
-    }
+        if (analyser) return;
 
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    audioContext = new AudioContextClass();
-    analyser = audioContext.createAnalyser();
-    analyser.fftSize = 128;
-    analyser.smoothingTimeConstant = 0.85;
-    frequencyData = new Uint8Array(analyser.frequencyBinCount);
-    mediaSource = audioContext.createMediaElementSource(audio);
-    mediaSource.connect(analyser);
-    analyser.connect(audioContext.destination);
+        analyser = audioContext.createAnalyser();
+        analyser.fftSize = 128;
+        analyser.smoothingTimeConstant = 0.85;
+        frequencyData = new Uint8Array(analyser.frequencyBinCount);
+        mediaSource = audioContext.createMediaElementSource(audio);
+        mediaSource.connect(analyser);
+        analyser.connect(audioContext.destination);
+    } catch (e) {
+        console.warn('AudioContext / Analyser setup skipped:', e);
+    }
 }
 
-function loadTrack(track) {
+function loadTrack(track, options = {}) {
     let url = '';
     if (track.status === 'completed' && track.processed_path) {
         url = track.processed_path;
@@ -248,25 +261,13 @@ function loadTrack(track) {
     cancelAudioFade();
     audio.src = url;
 
-    playerTitle.textContent = getTrackTitle(track);
-    playerArtist.textContent = track.artist || 'Unknown Artist';
+    syncPlayerBarUi(track, isPlaying);
+    syncHeroStage(track, isPlaying);
+    persistPlayerSession();
 
-    if (track.cover_path) {
-        playerCover.src = track.cover_path;
-        playerCover.classList.remove('hidden');
-        playerCoverPlaceholder.classList.add('hidden');
-    } else {
-        playerCover.classList.add('hidden');
-        playerCoverPlaceholder.classList.remove('hidden');
+    if (!options.skipPlayRecord) {
+        fetch(`/api/play/${track.id}/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
     }
-
-    if (karaokeLink) {
-        karaokeLink.href = `/karaoke/${track.id}/`;
-        karaokeLink.classList.remove('hidden');
-    }
-
-    updateLikeBtn(track.is_liked);
-    fetch(`/api/play/${track.id}/`, { method: 'POST', headers: {'X-CSRFToken': getCookie('csrftoken')} });
 }
 
 function getTargetVolume() {
@@ -304,17 +305,24 @@ function fadeAudioTo(target, duration = 240) {
     });
 }
 
-async function playAudioWithFade(duration = 260) {
+async function playAudioWithFade(duration = 160) {
     if (!audio.src) return;
     cancelAudioFade();
-    const targetVolume = getTargetVolume();
-    audio.volume = 0;
+    let targetVolume = getTargetVolume();
+    if (targetVolume <= 0) {
+        targetVolume = lastNonZeroVolume > 0 ? lastNonZeroVolume : 0.8;
+        if (volumeSlider) volumeSlider.value = targetVolume;
+        localStorage.setItem('player_volume', targetVolume);
+        updateMuteButton();
+    }
+    audio.volume = targetVolume;
     try {
+        if (audioContext && audioContext.state === 'suspended') {
+            await audioContext.resume().catch(() => {});
+        }
         await audio.play();
         setIsPlaying(true);
-        if (targetVolume > 0) await fadeAudioTo(targetVolume, duration);
     } catch (e) {
-        audio.volume = targetVolume;
         console.error('Playback failed:', e);
     }
 }
@@ -342,11 +350,9 @@ async function releaseCurrentTrackForDeletion() {
     audio.load();
     currentTrackId = null;
     setIsPlaying(false);
-    playerTitle.textContent = 'Выберите трек';
-    playerArtist.textContent = 'Музыка ждёт';
-    playerCover.classList.add('hidden');
-    playerCoverPlaceholder.classList.remove('hidden');
-    if (karaokeLink) karaokeLink.classList.add('hidden');
+    clearPlayerSession();
+    syncPlayerBarUi(null, false);
+    syncHeroStage(null, false);
 }
 
 // Controls
@@ -362,12 +368,15 @@ window.togglePlay = () => {
 
 function setIsPlaying(playing) {
     isPlaying = playing;
-    if (playPauseBtn) {
-        playPauseBtn.innerHTML = playing
+    const btn = document.getElementById('play-pause-btn');
+    if (btn) {
+        btn.innerHTML = playing
             ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
-            : '<i data-lucide="play" class="fill-current w-4 h-4 ml-0.5"></i>';
+            : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     }
-    lucide.createIcons();
+    syncHeroStage(getCurrentTrack(), playing);
+    sessionStorage.setItem('sonata_is_playing', String(playing));
+    if (window.lucide) lucide.createIcons();
     updateListPlayButtons(currentTrackId, playing);
 }
 
@@ -402,21 +411,40 @@ function updateListPlayButtons(id, playing) {
     btns.forEach(btn => {
         btn.innerHTML = playing
             ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
-            : '<i data-lucide="play" class="fill-current w-4 h-4 ml-1"></i>';
+            : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     });
     document.querySelectorAll(`.play-btn:not([data-track-id="${id}"])`).forEach(btn => {
-        btn.innerHTML = '<i data-lucide="play" class="fill-current w-4 h-4 ml-1"></i>';
+        btn.innerHTML = '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
     });
     lucide.createIcons();
 }
 
 // Events
+let lastTimePersist = 0;
 audio.addEventListener('timeupdate', () => {
-    if (!audio.duration) return;
-    const percent = (audio.currentTime / audio.duration) * 100;
-    progressBar.style.width = `${percent}%`;
-    currentTimeEl.innerText = formatTime(audio.currentTime);
-    durationEl.innerText = formatTime(audio.duration || 0);
+    if (isScrubbing) return;
+    if (!audio.duration || isNaN(audio.duration)) return;
+    const percent = Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100));
+    if (progressBar) progressBar.style.width = `${percent}%`;
+    if (scrubTooltip) scrubTooltip.textContent = formatTime(audio.currentTime);
+    if (scrubDuration) scrubDuration.textContent = formatTime(audio.duration || 0);
+    if (currentTimeEl) currentTimeEl.innerText = formatTime(audio.currentTime);
+    if (durationEl) durationEl.innerText = formatTime(audio.duration || 0);
+    const trackEl = progressTrack || document.getElementById('progress-track');
+    if (trackEl) trackEl.setAttribute('aria-valuenow', Math.round(percent));
+
+    const now = Date.now();
+    if (now - lastTimePersist > 1000 && currentTrackId) {
+        lastTimePersist = now;
+        sessionStorage.setItem('sonata_current_time', String(audio.currentTime));
+    }
+});
+
+audio.addEventListener('loadedmetadata', () => {
+    if (audio.duration && !isNaN(audio.duration)) {
+        if (scrubDuration) scrubDuration.textContent = formatTime(audio.duration);
+        if (durationEl) durationEl.innerText = formatTime(audio.duration);
+    }
 });
 
 audio.addEventListener('ended', () => {
@@ -460,13 +488,157 @@ document.addEventListener('visibilitychange', () => {
     backgroundPlaybackWanted = false;
 });
 
-// Seek
+// Scrubbing & Seeking
+function getPercentFromEvent(e, trackEl) {
+    const rect = trackEl.getBoundingClientRect();
+    if (!rect.width) return 0;
+    const clientX = e.clientX ?? (e.touches && e.touches[0] ? e.touches[0].clientX : 0);
+    const x = clientX - rect.left;
+    return Math.min(1, Math.max(0, x / rect.width));
+}
+
+function updateProgressVisuals(percent, targetTime) {
+    const percentClamped = Math.min(100, Math.max(0, percent * 100));
+    if (progressBar) {
+        progressBar.style.width = `${percentClamped}%`;
+    }
+    if (currentTimeEl && Number.isFinite(targetTime)) {
+        currentTimeEl.innerText = formatTime(targetTime);
+    }
+    if (scrubTooltip && Number.isFinite(targetTime)) {
+        scrubTooltip.textContent = formatTime(targetTime);
+
+        // Edge protection: prevent tooltip from clipping out on the left edge
+        const trackEl = progressTrack || document.getElementById('progress-track');
+        const trackWidth = trackEl ? trackEl.clientWidth : 800;
+        const currentX = (percentClamped / 100) * trackWidth;
+
+        if (currentX < 24) {
+            const offset = Math.round(24 - currentX);
+            scrubTooltip.style.transform = `translateX(calc(50% + ${offset}px)) translateY(0)`;
+        } else {
+            scrubTooltip.style.transform = '';
+        }
+
+        // Fade out duration badge if thumb approaches the right end to avoid visual overlap
+        if (scrubDuration) {
+            if (trackWidth - currentX < 70) {
+                const fade = Math.max(0, (trackWidth - currentX - 25) / 45);
+                scrubDuration.style.opacity = fade.toFixed(2);
+            } else {
+                scrubDuration.style.opacity = '';
+            }
+        }
+    }
+    if (scrubDuration && audio.duration && !isNaN(audio.duration)) {
+        scrubDuration.textContent = formatTime(audio.duration);
+    }
+    const trackEl = progressTrack || document.getElementById('progress-track');
+    if (trackEl) {
+        trackEl.setAttribute('aria-valuenow', Math.round(percentClamped));
+    }
+}
+
+function initScrubbing() {
+    const trackEl = progressTrack || document.getElementById('progress-track');
+    if (!trackEl) return;
+
+    const applySeek = (e) => {
+        if (!audio.duration || isNaN(audio.duration)) return;
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        if (Number.isFinite(targetTime)) {
+            audio.currentTime = targetTime;
+            updateProgressVisuals(percent, targetTime);
+        }
+    };
+
+    const onPointerDown = (e) => {
+        if (!audio.duration || isNaN(audio.duration)) return;
+        isScrubbing = true;
+        trackEl.classList.add('is-scrubbing');
+        try {
+            trackEl.setPointerCapture(e.pointerId);
+        } catch (_) {}
+
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        updateProgressVisuals(percent, targetTime);
+    };
+
+    const onPointerMove = (e) => {
+        if (!isScrubbing) return;
+        if (!audio.duration || isNaN(audio.duration)) return;
+
+        const percent = getPercentFromEvent(e, trackEl);
+        const targetTime = percent * audio.duration;
+        updateProgressVisuals(percent, targetTime);
+    };
+
+    const onPointerUp = (e) => {
+        if (!isScrubbing) return;
+        isScrubbing = false;
+        trackEl.classList.remove('is-scrubbing');
+        try {
+            trackEl.releasePointerCapture(e.pointerId);
+        } catch (_) {}
+
+        if (scrubTooltip) scrubTooltip.style.transform = '';
+        if (scrubDuration) scrubDuration.style.opacity = '';
+
+        applySeek(e);
+    };
+
+    trackEl.addEventListener('pointerdown', onPointerDown);
+    trackEl.addEventListener('pointermove', onPointerMove);
+    trackEl.addEventListener('pointerup', onPointerUp);
+    trackEl.addEventListener('pointercancel', onPointerUp);
+    trackEl.addEventListener('click', applySeek);
+
+    trackEl.addEventListener('keydown', (e) => {
+        if (!audio.duration || isNaN(audio.duration)) return;
+        let nextTime = audio.currentTime;
+        if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            nextTime = Math.min(audio.duration, audio.currentTime + 5);
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+            e.preventDefault();
+            nextTime = Math.max(0, audio.currentTime - 5);
+        } else if (e.key === 'Home') {
+            e.preventDefault();
+            nextTime = 0;
+        } else if (e.key === 'End') {
+            e.preventDefault();
+            nextTime = audio.duration;
+        } else {
+            return;
+        }
+        audio.currentTime = nextTime;
+        const percent = nextTime / audio.duration;
+        updateProgressVisuals(percent, nextTime);
+
+        trackEl.classList.add('is-scrubbing');
+        clearTimeout(trackEl._scrubTimer);
+        trackEl._scrubTimer = setTimeout(() => {
+            if (!isScrubbing) {
+                trackEl.classList.remove('is-scrubbing');
+                if (scrubTooltip) scrubTooltip.style.transform = '';
+                if (scrubDuration) scrubDuration.style.opacity = '';
+            }
+        }, 900);
+    });
+}
+
+// Seek fallback
 window.seek = (e) => {
-    if (!audio.duration) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const percent = x / rect.width;
-    audio.currentTime = percent * audio.duration;
+    if (!audio.duration || isNaN(audio.duration)) return;
+    const trackEl = progressTrack || document.getElementById('progress-track') || e.currentTarget;
+    const percent = getPercentFromEvent(e, trackEl);
+    const targetTime = percent * audio.duration;
+    if (Number.isFinite(targetTime)) {
+        audio.currentTime = targetTime;
+        updateProgressVisuals(percent, targetTime);
+    }
 };
 
 // Volume
@@ -560,22 +732,50 @@ window.toggleLikeCurrentTrack = async () => {
         });
         const data = await res.json();
         updateLikeBtn(data.is_liked);
+        updateDislikeBtn(data.is_disliked);
         const track = window.tracks.find(t => Number(t.id) === Number(currentTrackId));
-        if (track) track.is_liked = data.is_liked;
+        if (track) {
+            track.is_liked = data.is_liked;
+            track.is_disliked = data.is_disliked;
+        }
+    } catch(e) {
+        console.error(e);
+    }
+};
+
+window.toggleDislikeCurrentTrack = async () => {
+    if (!currentTrackId) return;
+
+    try {
+        const res = await fetch(`/api/dislike/${currentTrackId}/`, {
+             method: 'POST',
+             headers: {'X-CSRFToken': getCookie('csrftoken')}
+        });
+        const data = await res.json();
+        updateLikeBtn(data.is_liked);
+        updateDislikeBtn(data.is_disliked);
+        const track = window.tracks.find(t => Number(t.id) === Number(currentTrackId));
+        if (track) {
+            track.is_liked = data.is_liked;
+            track.is_disliked = data.is_disliked;
+        }
     } catch(e) {
         console.error(e);
     }
 };
 
 function updateLikeBtn(isLiked) {
-    if (!likeBtn) return;
-    if (isLiked) {
-        likeBtn.classList.add('text-red-500', 'fill-current');
-        likeBtn.classList.remove('text-gray-500');
-    } else {
-        likeBtn.classList.add('text-gray-500');
-        likeBtn.classList.remove('text-red-500', 'fill-current');
-    }
+    const btn = document.getElementById('like-btn');
+    if (!btn) return;
+    btn.classList.toggle('is-liked', Boolean(isLiked));
+    btn.classList.toggle('text-red-500', Boolean(isLiked));
+    btn.classList.toggle('fill-current', Boolean(isLiked));
+}
+
+function updateDislikeBtn(isDisliked) {
+    const btn = document.getElementById('dislike-btn');
+    if (!btn) return;
+    btn.classList.toggle('is-disliked', Boolean(isDisliked));
 }
 
 function updateMuteButton() {
@@ -635,3 +835,280 @@ window.deleteTrack = async (id) => {
         alert('Не удалось удалить трек: ' + e.message);
     }
 };
+
+// Hero Stage Sync & State Management
+function getCurrentTrack() {
+    if (!currentTrackId) return null;
+    return window.tracks.find(t => Number(t.id) === Number(currentTrackId)) || null;
+}
+
+function syncHeroStage(track, playing) {
+    const heroTitle = document.getElementById('hero-title');
+    const heroCopy = document.getElementById('hero-copy');
+    const heroPlayBtn = document.getElementById('hero-play-btn');
+
+    if (!heroTitle) return; // Not on home stage
+
+    if (!track) {
+        heroTitle.textContent = 'Музыкальная коллекция';
+        if (heroCopy) {
+            heroCopy.textContent = (window.tracks && window.tracks.length > 0)
+                ? 'Выберите трек в списке ниже для воспроизведения'
+                : 'Загрузите первые треки, чтобы собрать библиотеку, историю обработки и избранное в одном пространстве.';
+        }
+        if (heroPlayBtn) heroPlayBtn.classList.add('hidden');
+        return;
+    }
+
+    heroTitle.textContent = getTrackTitle(track);
+    if (heroCopy) {
+        const artist = track.artist || 'Неизвестный исполнитель';
+        const status = playing ? 'Сейчас играет' : 'На паузе';
+        heroCopy.textContent = `${artist} · ${status}`;
+    }
+    if (heroPlayBtn) {
+        heroPlayBtn.classList.remove('hidden');
+        heroPlayBtn.innerHTML = playing
+            ? '<i data-lucide="pause"></i><span id="hero-play-label">Пауза</span>'
+            : '<i data-lucide="play"></i><span id="hero-play-label">Слушать</span>';
+        if (window.lucide) lucide.createIcons();
+    }
+}
+
+function syncPlayerBarUi(track, playing) {
+    const bar = document.getElementById('player-bar');
+    if (!bar) return;
+
+    if (!track) {
+        bar.classList.remove('has-track');
+        const pTitle = document.getElementById('player-title');
+        if (pTitle) pTitle.textContent = '';
+        const pArtist = document.getElementById('player-artist');
+        if (pArtist) pArtist.textContent = '';
+        const sTooltip = document.getElementById('scrub-tooltip');
+        if (sTooltip) sTooltip.textContent = '0:00';
+        const sDuration = document.getElementById('scrub-duration');
+        if (sDuration) sDuration.textContent = '0:00';
+        const pCover = document.getElementById('player-cover');
+        const pPlaceholder = document.getElementById('player-cover-placeholder');
+        if (pCover) pCover.classList.add('hidden');
+        if (pPlaceholder) pPlaceholder.classList.remove('hidden');
+        const pBar = document.getElementById('progress-bar');
+        if (pBar) pBar.style.width = '0%';
+        return;
+    }
+
+    bar.classList.add('has-track');
+    const pTitle = document.getElementById('player-title');
+    if (pTitle) pTitle.textContent = getTrackTitle(track);
+    const pArtist = document.getElementById('player-artist');
+    if (pArtist) pArtist.textContent = track.artist || 'Неизвестный исполнитель';
+    const sDuration = document.getElementById('scrub-duration');
+    const dur = track.duration || (audio && !isNaN(audio.duration) ? audio.duration : 0);
+    if (sDuration) sDuration.textContent = formatTime(dur);
+
+    const pCover = document.getElementById('player-cover');
+    const pPlaceholder = document.getElementById('player-cover-placeholder');
+    if (track.cover_path) {
+        if (pCover) {
+            pCover.src = track.cover_path;
+            pCover.classList.remove('hidden');
+        }
+        if (pPlaceholder) pPlaceholder.classList.add('hidden');
+    } else {
+        if (pCover) {
+            pCover.src = '';
+            pCover.classList.add('hidden');
+        }
+        if (pPlaceholder) pPlaceholder.classList.remove('hidden');
+    }
+
+    const btn = document.getElementById('play-pause-btn');
+    if (btn) {
+        btn.innerHTML = playing
+            ? '<i data-lucide="pause" class="fill-current w-4 h-4"></i>'
+            : '<i data-lucide="play" class="fill-current w-4 h-4"></i>';
+    }
+
+    updateLikeBtn(track.is_liked);
+    updateDislikeBtn(track.is_disliked);
+
+    if (audio && audio.duration && !isNaN(audio.duration)) {
+        const percent = Math.min(100, Math.max(0, (audio.currentTime / audio.duration) * 100));
+        const pBar = document.getElementById('progress-bar');
+        if (pBar) pBar.style.width = `${percent}%`;
+        const sTooltip = document.getElementById('scrub-tooltip');
+        if (sTooltip) sTooltip.textContent = formatTime(audio.currentTime);
+    }
+    if (window.lucide) lucide.createIcons();
+}
+
+// Session Persistence
+function persistPlayerSession() {
+    if (currentTrackId) {
+        sessionStorage.setItem('sonata_track_id', String(currentTrackId));
+        sessionStorage.setItem('sonata_current_time', String(audio.currentTime || 0));
+        sessionStorage.setItem('sonata_is_playing', String(!audio.paused && isPlaying));
+    }
+}
+
+function clearPlayerSession() {
+    sessionStorage.removeItem('sonata_track_id');
+    sessionStorage.removeItem('sonata_current_time');
+    sessionStorage.removeItem('sonata_is_playing');
+}
+
+function restoreSessionTrack() {
+    const savedTrackId = sessionStorage.getItem('sonata_track_id');
+    if (!savedTrackId) {
+        syncHeroStage(null, false);
+        syncPlayerBarUi(null, false);
+        return;
+    }
+
+    const savedId = Number(savedTrackId);
+    const track = window.tracks.find(t => Number(t.id) === savedId);
+    if (!track) {
+        syncHeroStage(null, false);
+        syncPlayerBarUi(null, false);
+        return;
+    }
+
+    const savedTime = parseFloat(sessionStorage.getItem('sonata_current_time') || '0');
+    const wasPlaying = sessionStorage.getItem('sonata_is_playing') === 'true';
+
+    currentTrackId = savedId;
+    loadTrack(track, { skipPlayRecord: true });
+
+    if (Number.isFinite(savedTime) && savedTime > 0) {
+        audio.currentTime = savedTime;
+        if (audio.duration && !isNaN(audio.duration)) {
+            updateProgressVisuals(savedTime / audio.duration, savedTime);
+        }
+    }
+
+    if (wasPlaying) {
+        setupAudioAnalysis();
+        playAudioWithFade(160).catch(() => {
+            setIsPlaying(false);
+            syncHeroStage(track, false);
+            syncPlayerBarUi(track, false);
+        });
+    } else {
+        setIsPlaying(false);
+        syncHeroStage(track, false);
+        syncPlayerBarUi(track, false);
+    }
+}
+
+function initUnloadPersistence() {
+    window.addEventListener('beforeunload', () => {
+        persistPlayerSession();
+    });
+    window.addEventListener('pagehide', () => {
+        persistPlayerSession();
+    });
+}
+
+// Seamless App Navigation (persists audio playback between views)
+function initSeamlessNavigation() {
+    document.addEventListener('click', async (e) => {
+        const link = e.target.closest('a[href]');
+        if (!link) return;
+
+        const href = link.getAttribute('href');
+        if (!href || href.startsWith('#') || href.startsWith('javascript:') || href.startsWith('mailto:') || link.target === '_blank') {
+            return;
+        }
+
+        const url = new URL(link.href, window.location.origin);
+        if (url.origin !== window.location.origin) return;
+
+        // Skip static files, media, admin, and api endpoints
+        if (url.pathname.startsWith('/admin') ||
+            url.pathname.startsWith('/media') ||
+            url.pathname.startsWith('/api') ||
+            url.pathname.startsWith('/library_files') ||
+            url.pathname.startsWith('/static')) {
+            return;
+        }
+
+        // Don't intercept if modifier keys held
+        if (e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
+
+        e.preventDefault();
+        if (window.location.pathname === url.pathname && window.location.search === url.search) {
+            return;
+        }
+
+        await navigateTo(url.href);
+    });
+
+    window.addEventListener('popstate', async () => {
+        await navigateTo(window.location.href, { pushHistory: false });
+    });
+}
+
+async function navigateTo(href, options = { pushHistory: true }) {
+    try {
+        const res = await fetch(href, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+        if (!res.ok) {
+            window.location.href = href;
+            return;
+        }
+
+        const html = await res.text();
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+
+        const newFrame = doc.querySelector('.page-frame');
+        const currentFrame = document.querySelector('.page-frame');
+        if (!newFrame || !currentFrame) {
+            window.location.href = href;
+            return;
+        }
+
+        currentFrame.innerHTML = newFrame.innerHTML;
+        document.title = doc.title;
+
+        if (options.pushHistory) {
+            window.history.pushState({}, '', href);
+        }
+
+        // Update active class on sidebar links
+        const url = new URL(href, window.location.origin);
+        document.querySelectorAll('.sidebar-link, .profile-entry').forEach(el => {
+            const elHref = el.getAttribute('href');
+            if (elHref) {
+                const targetPath = new URL(elHref, window.location.origin).pathname;
+                if (targetPath === url.pathname) {
+                    el.classList.add('is-active');
+                } else {
+                    el.classList.remove('is-active');
+                }
+            }
+        });
+
+        // Update body class for page-specific styling
+        const newBody = doc.querySelector('body');
+        if (newBody && newBody.className) {
+            document.body.className = newBody.className;
+        }
+
+        if (window.lucide) lucide.createIcons();
+
+        // Sync hero stage or list buttons on new page
+        const curTrack = getCurrentTrack();
+        if (curTrack) {
+            syncHeroStage(curTrack, isPlaying);
+            syncPlayerBarUi(curTrack, isPlaying);
+            updateListPlayButtons(curTrack.id, isPlaying);
+        } else {
+            syncHeroStage(null, false);
+            syncPlayerBarUi(null, false);
+        }
+    } catch (err) {
+        console.error('Seamless navigation error, falling back:', err);
+        window.location.href = href;
+    }
+}

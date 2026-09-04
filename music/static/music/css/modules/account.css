@@ -20,8 +20,8 @@
     padding: 28px;
     border-radius: 26px;
     background:
-        radial-gradient(circle at 70% 28%, rgba(255, 51, 0, .26), transparent 28%),
-        linear-gradient(120deg, rgba(17, 17, 17, .94), rgba(8, 8, 8, .72));
+        radial-gradient(circle at 70% 28%, rgba(255, 210, 30, .18), transparent 32%),
+        linear-gradient(120deg, rgba(17, 17, 17, .96), rgba(8, 8, 8, .85));
 }
 
 .account-profile-main {
@@ -43,7 +43,7 @@
     border-radius: 50%;
     background:
         linear-gradient(#090909, #090909) padding-box,
-        linear-gradient(135deg, #ff3300, #cc0000) border-box;
+        linear-gradient(135deg, var(--yellow), rgba(255, 210, 30, .45)) border-box;
     color: #fff;
     cursor: pointer;
 }
@@ -159,8 +159,9 @@
 
 .account-panel-accent {
     background:
-        linear-gradient(135deg, rgba(255, 51, 0, .24), rgba(204, 0, 0, .12)),
-        rgba(8, 8, 8, .62);
+        linear-gradient(135deg, rgba(255, 210, 30, .06), rgba(255, 255, 255, .02)),
+        rgba(12, 12, 12, .75);
+    border: 1px solid rgba(255, 210, 30, .15);
 }
 
 .account-panel-head {
@@ -316,16 +317,17 @@
 
 .plan-option.is-selected,
 .plan-option:has(input:checked) {
-    border-color: rgba(255, 51, 0, .5);
-    background: linear-gradient(135deg, rgba(255, 51, 0, .18), rgba(204, 0, 0, .08));
+    border-color: rgba(255, 210, 30, .55);
+    background: linear-gradient(135deg, rgba(255, 210, 30, .12), rgba(255, 170, 0, .05));
+    box-shadow: 0 0 20px rgba(255, 210, 30, .08);
 }
 
 .plan-option.is-selected::after,
 .plan-option:has(input:checked)::after {
-    border-color: rgba(255, 255, 255, .58);
+    border-color: rgba(255, 210, 30, .8);
     background:
-        radial-gradient(circle, #fff 0 34%, transparent 38%),
-        linear-gradient(135deg, #ff3300, #cc0000);
+        radial-gradient(circle, #080808 0 34%, transparent 38%),
+        linear-gradient(135deg, var(--yellow), #e6a800);
 }
 
 .plan-option span {
@@ -345,8 +347,8 @@
 }
 
 .plan-option-pro {
-    border-color: rgba(255, 51, 0, .36);
-    background: linear-gradient(135deg, rgba(255, 51, 0, .2), rgba(204, 0, 0, .08));
+    border-color: rgba(255, 210, 30, .28);
+    background: linear-gradient(135deg, rgba(255, 210, 30, .08), rgba(255, 255, 255, .02));
 }
 
 .account-toggle {

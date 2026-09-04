@@ -5,25 +5,22 @@
     <section class="home-stage">
         <div class="home-stage-inner">
             <div class="stage-copy">
-                <p class="eyebrow">Главная</p>
-                <h1>{% if featured_track %}{{ featured_track.display_title|default:"Музыкальная коллекция" }}{% else %}Музыкальная коллекция{% endif %}</h1>
-                <p class="hero-copy">
-                    {% if featured_track %}
-                        {{ featured_track.artist|default:"Неизвестный исполнитель" }}{% if featured_track.status == 'completed' %} · обработанный трек готов к запуску{% endif %}
+                <h1 id="hero-title">Музыкальная коллекция</h1>
+                <p id="hero-copy" class="hero-copy">
+                    {% if tracks %}
+                        Выберите трек в списке ниже для воспроизведения
                     {% else %}
                         Загрузите первые треки, чтобы собрать библиотеку, историю обработки и избранное в одном пространстве.
                     {% endif %}
                 </p>
                 <div class="hero-controls">
-                    {% if featured_track %}
-                        <button type="button"
-                                onclick="playTrack(Number(this.dataset.trackId))"
-                                data-track-id="{{ featured_track.id }}"
-                                class="primary-pill primary-pill-hero">
-                            <i data-lucide="play"></i>
-                            <span>Слушать</span>
-                        </button>
-                    {% endif %}
+                    <button type="button"
+                            id="hero-play-btn"
+                            onclick="togglePlay()"
+                            class="primary-pill primary-pill-hero hidden">
+                        <i data-lucide="play"></i>
+                        <span id="hero-play-label">Слушать</span>
+                    </button>
                     <a href="{% url 'account' %}" class="soft-pill">
                         <i data-lucide="sliders-horizontal"></i>
                         <span>Настройки</span>
@@ -45,8 +42,9 @@
                     <div class="cover-stack" aria-hidden="true">
                         {% for track in liked_tracks %}
                             <span class="cover-stack-item">
-                                {% if track.cover_image %}
-                                    <img src="{{ track.cover_image.url }}" alt="">
+                                {% if track.has_cover %}
+                                    <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                                    <i data-lucide="music" class="hidden"></i>
                                 {% else %}
                                     <i data-lucide="music"></i>
                                 {% endif %}
@@ -74,8 +72,9 @@
                         </div>
                     </div>
                     <div class="spotlight-cover" aria-hidden="true">
-                        {% if history_tracks and history_tracks.0.cover_image %}
-                            <img src="{{ history_tracks.0.cover_image.url }}" alt="">
+                        {% if history_tracks and history_tracks.0.has_cover %}
+                            <img src="{{ history_tracks.0.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                            <i data-lucide="disc-3" class="hidden"></i>
                         {% else %}
                             <i data-lucide="disc-3"></i>
                         {% endif %}
@@ -114,14 +113,15 @@
 
         <div class="cover-grid">
             {% for track in tracks|slice:":5" %}
-            <article class="cover-card" onclick="playTrack({{ track.id }})">
+            <article class="cover-card" onclick="playTrack(Number(this.dataset.trackId))" data-track-id="{{ track.id }}">
                 <div class="cover-art">
-                    {% if track.cover_image %}
-                        <img src="{{ track.cover_image.url }}" alt="">
+                    {% if track.has_cover %}
+                        <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                        <div class="cover-placeholder hidden"><i data-lucide="music"></i></div>
                     {% else %}
                         <div class="cover-placeholder"><i data-lucide="music"></i></div>
                     {% endif %}
-                    <button class="floating-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+                    <button class="floating-play play-btn" data-track-id="{{ track.id }}" onclick="event.stopPropagation(); playTrack(Number(this.dataset.trackId));" aria-label="Играть">
                         <i data-lucide="play"></i>
                     </button>
                 </div>
@@ -141,13 +141,14 @@
         {% if tracks %}
         <div class="track-table">
             {% for track in tracks %}
-            <article class="track-row group">
-                <button onclick="playTrack({{ track.id }})" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
+            <article class="track-row group" data-track-id="{{ track.id }}">
+                <button onclick="playTrack(Number(this.dataset.trackId))" class="row-play play-btn" data-track-id="{{ track.id }}" aria-label="Играть">
                     <i data-lucide="play"></i>
                 </button>
                 <div class="row-cover">
-                    {% if track.cover_image %}
-                        <img src="{{ track.cover_image.url }}" alt="">
+                    {% if track.has_cover %}
+                        <img src="{{ track.cover_url }}" alt="" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.classList.remove('hidden');">
+                        <i data-lucide="music" class="hidden"></i>
                     {% else %}
                         <i data-lucide="music"></i>
                     {% endif %}
@@ -168,10 +169,10 @@
                 <span class="row-stat">{{ track.play_count }} просл.</span>
                 <div class="row-actions">
                     {% if track.status == 'completed' %}
-                    <button onclick="openDetails({{ track.id }})" class="icon-btn small" title="Детали"><i data-lucide="bar-chart-2"></i></button>
+                    <button onclick="openDetails(Number(this.dataset.trackId))" data-track-id="{{ track.id }}" class="icon-btn small" title="Детали"><i data-lucide="bar-chart-2"></i></button>
                     {% endif %}
-                    <button onclick="editTrack({{ track.id }})" class="icon-btn small" title="Переименовать"><i data-lucide="pencil"></i></button>
-                    <button onclick="deleteTrack({{ track.id }})" class="icon-btn small danger" title="Удалить"><i data-lucide="trash-2"></i></button>
+                    <button onclick="editTrack(Number(this.dataset.trackId))" data-track-id="{{ track.id }}" class="icon-btn small" title="Переименовать"><i data-lucide="pencil"></i></button>
+                    <button onclick="deleteTrack(Number(this.dataset.trackId))" data-track-id="{{ track.id }}" class="icon-btn small danger" title="Удалить"><i data-lucide="trash-2"></i></button>
                 </div>
             </article>
             {% endfor %}

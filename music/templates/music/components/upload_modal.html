@@ -103,6 +103,30 @@
 
             <!-- AI Settings -->
             <div id="ai-settings" class="space-y-4">
+                <!-- AI Engine Selector -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Движок генерации (AI Engine)</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button type="button" onclick="setAiEngine('stealth')" id="engine-stealth" class="ai-engine-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 border border-white/10 text-slate-300 hover:text-white hover:border-indigo-500/50 transition text-left">
+                            <span class="block text-white font-bold">Stealth</span>
+                            <span class="block text-[10px] text-slate-400">Anti-AI Master</span>
+                        </button>
+                        <button type="button" onclick="setAiEngine('audiosr')" id="engine-audiosr" class="ai-engine-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-indigo-600/30 border border-indigo-500 text-white shadow transition text-left">
+                            <span class="block text-indigo-300 font-bold">AudioSR Ultra</span>
+                            <span class="block text-[10px] text-slate-300">Diffusion 48k</span>
+                        </button>
+                        <button type="button" onclick="setAiEngine('apollo')" id="engine-apollo" class="ai-engine-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 border border-white/10 text-slate-300 hover:text-white hover:border-indigo-500/50 transition text-left">
+                            <span class="block text-white font-bold">Apollo</span>
+                            <span class="block text-[10px] text-slate-400">Sub-Band Model</span>
+                        </button>
+                        <button type="button" onclick="setAiEngine('flowhigh')" id="engine-flowhigh" class="ai-engine-btn px-2.5 py-2 rounded-lg text-xs font-semibold bg-slate-800 border border-white/10 text-slate-300 hover:text-white hover:border-indigo-500/50 transition text-left">
+                            <span class="block text-white font-bold">FLowHigh</span>
+                            <span class="block text-[10px] text-slate-400">Flow Matching</span>
+                        </button>
+                    </div>
+                    <input type="hidden" id="ai-engine" value="audiosr">
+                </div>
+
                 <div class="grid grid-cols-2 gap-4">
                     <div>
                         <label class="block text-xs font-bold text-slate-500 uppercase mb-2">Quality Preset</label>
@@ -146,12 +170,49 @@
                     </button>
                 </div>
                 <select id="dsp-preset" onchange="updateDspPreset()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
-                    <option value="mastering" selected>Mastering (Balanced)</option>
+                    <option value="mastering" selected>Mastering (Balanced Studio)</option>
+                    <option value="vocal_polish">Vocal Polish (Presence & Clarity)</option>
+                    <option value="club_bass">Club Bass (Sub Focus & Punch)</option>
+                    <option value="broadcast">Broadcast (Tight Dynamic Control)</option>
+                    <option value="tape_warmth">Tape Warmth (Analog Saturation)</option>
+                    <option value="natural_air">Natural Air (High-Frequency Sheen)</option>
+                    <option value="music_fix">Music Fix (ComfyUI Anti-Mud 200–500Hz)</option>
+                    <option value="audio_repair">Audio Repair (De-Clip & De-Click)</option>
                     <option value="deep_bass">Deep Bass (Sub Focus)</option>
+                    <option value="punchy">Punchy (Drums/Bass)</option>
                     <option value="clear">Clear (Vocal Focus)</option>
                     <option value="warm">Warm (Vintage/Tube)</option>
-                    <option value="punchy">Punchy (Drums/Bass)</option>
                 </select>
+
+                <!-- Parametric Pro-Q 3 Pre-Filter -->
+                <div id="pro-q-panel" class="p-3.5 bg-slate-900/80 rounded-xl border border-white/10 space-y-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="font-bold text-slate-200 flex items-center gap-1.5">
+                            <i data-lucide="sliders" class="w-3.5 h-3.5 text-amber-400"></i> FabFilter Pro-Q 3 Pre-Filter
+                        </span>
+                        <span id="crossover-marker-label" class="text-[11px] font-mono text-amber-300">Crossover: 15.5 kHz</span>
+                    </div>
+                    <div class="relative w-full h-28 bg-slate-950 rounded-lg border border-white/5 overflow-hidden">
+                        <canvas id="pro-q-canvas" class="w-full h-full block cursor-crosshair"></canvas>
+                        <div class="absolute bottom-1 right-2 text-[9px] font-mono text-slate-500 pointer-events-none">20 Hz — 20 kHz • Drag nodes to sculpt</div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 text-xs pt-1">
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>Crossover Split</span>
+                                <span id="crossover-val" class="font-mono text-amber-300">15.5 kHz</span>
+                            </div>
+                            <input type="range" id="crossover-slider" min="10000" max="19000" step="250" value="15500" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-amber-400" oninput="updateProQCrossover(this.value)">
+                        </div>
+                        <div>
+                            <div class="flex justify-between text-[11px] text-slate-400 mb-1">
+                                <span>De-Mud Notch (350 Hz)</span>
+                                <span id="notch-val" class="font-mono text-indigo-300">-1.5 dB</span>
+                            </div>
+                            <input type="range" id="notch-slider" min="-6" max="0" step="0.5" value="-1.5" class="w-full h-1.5 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-indigo-400" oninput="updateProQNotch(this.value)">
+                        </div>
+                    </div>
+                </div>
 
                 <div id="dsp-advanced" class="hidden space-y-4 p-4 bg-slate-800/50 rounded-lg border border-white/5 animate-in fade-in slide-in-from-top-2 duration-300">
                     <!-- Stereo -->

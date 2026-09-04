@@ -12,6 +12,7 @@ library/*
 !library/.gitkeep
 media/
 verification_*.png
+ChatGPT Image *.png
 .DS_Store
 debug_output/
 .samples/
@@ -35,3 +36,5 @@ env/
 .vscode/
 *.swp
 *.swo
+
+scratch/

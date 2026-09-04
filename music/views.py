@@ -1,9 +1,12 @@
 import os
+import re
+import mimetypes
 import threading
 import json
 import logging
+from urllib.parse import unquote
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, HttpResponse, FileResponse
+from django.http import JsonResponse, HttpResponse, FileResponse, StreamingHttpResponse, Http404
 from django.views.decorators.http import require_POST, require_http_methods
 from django.conf import settings
 from django.core.files.storage import default_storage
@@ -16,6 +19,7 @@ from .account_state import account_payload, clear_guest_profile, get_account_pro
 from .models import Track, UserProfile
 from .services.upscaler import upscaler
 from .services.metadata import extract_metadata
+from .openapi import get_openapi_spec
 
 logger = logging.getLogger(__name__)
 
@@ -94,9 +98,11 @@ def track_payload(t):
         'artist': t.artist,
         'status': t.status,
         'status_display': t.get_status_display(),
-        'cover_path': t.cover_image.url if t.cover_image else None,
-        'processed_path': t.processed_file.url if t.processed_file else None,
-        'audio_url': t.audio_file.url if t.audio_file else None,
+        'cover_path': t.cover_url,
+        'has_cover': t.has_cover,
+        'processed_path': t.processed_file.url if t.has_processed_file else None,
+        'audio_url': t.audio_file.url if t.has_audio_file else None,
+        'is_available': t.is_available,
         'filename': t.original_filename,
         'processed_filename': t.processed_filename,
         'display_format': t.display_format,
@@ -107,17 +113,27 @@ def track_payload(t):
         'musical_key': t.musical_key,
         'spectral_centroid': t.spectral_centroid,
         'is_liked': t.is_liked,
+        'is_disliked': t.is_disliked,
         'play_count': t.play_count,
     }
 
 
 def delete_track_files(track):
     if track.audio_file:
-        track.audio_file.delete(save=False)
+        try:
+            track.audio_file.delete(save=False)
+        except Exception:
+            pass
     if track.processed_file:
-        track.processed_file.delete(save=False)
+        try:
+            track.processed_file.delete(save=False)
+        except Exception:
+            pass
     if track.cover_image:
-        track.cover_image.delete(save=False)
+        try:
+            track.cover_image.delete(save=False)
+        except Exception:
+            pass
 
 
 def normalize_processing_payload(data):
@@ -159,6 +175,8 @@ def normalize_processing_payload(data):
         'voice_clarity': as_float(data.get('voice_clarity'), 0.0, -5.0, 10.0),
         'compressor_amount': normalized_ratio(data.get('compressor_amount'), 0.5),
         'stereo_width': normalized_ratio(data.get('stereo_width'), 1.0, 2.0),
+        'crossover_freq': as_float(data.get('crossover_freq'), 15500.0, 10000.0, 20000.0),
+        'mud_cut_db': as_float(data.get('mud_cut_db'), 0.0, -12.0, 0.0),
     }
 
     return {
@@ -170,6 +188,7 @@ def normalize_processing_payload(data):
         'guidance': as_float(data.get('guidance'), 3.5, 1.0, 15.0),
         'seed': as_int(data.get('seed'), 42, 0, 2147483647),
         'batch_size': as_int(data.get('batch_size'), 2, 1, 8),
+        'engine': data.get('engine') or 'audiosr',
         'dsp_preset': data.get('dsp_preset') or 'mastering',
         'dsp_params': dsp_params,
     }
@@ -189,17 +208,12 @@ def unique_mock_username(seed):
 
 def index(request):
     tracks = Track.objects.all().order_by('-created_at')
-    featured_track = (
-        Track.objects.filter(cover_image__isnull=False).order_by('-created_at').first()
-        or Track.objects.filter(status='completed').order_by('-created_at').first()
-        or tracks.first()
-    )
     liked_tracks = list(Track.objects.filter(is_liked=True).order_by('-created_at')[:4])
     history_tracks = list(Track.objects.filter(play_count__gt=0).order_by('-created_at')[:4])
 
     context = {
         'tracks': tracks,
-        'featured_track': featured_track,
+        'featured_track': None,
         'liked_tracks': liked_tracks,
         'history_tracks': history_tracks,
         'liked_count': Track.objects.filter(is_liked=True).count(),
@@ -267,7 +281,7 @@ def upload(request):
             'title': track.title,
             'display_title': track.display_title,
             'artist': track.artist,
-            'cover_url': track.cover_image.url if track.cover_image else None,
+            'cover_url': track.cover_url,
             'audio_url': track.audio_file.url,
             'filename': os.path.basename(track.audio_file.name),
             'bpm': track.bpm,
@@ -326,7 +340,7 @@ def run_upscaling_thread(track_id, params):
         track.target_bitrate = params.get('bitrate')
         track.save()
 
-        cover_image_path = track.cover_image.path if track.cover_image else None
+        cover_image_path = track.cover_image.path if track.has_cover else None
 
         # Call Service
         success = upscaler.process_track(
@@ -476,8 +490,20 @@ def karaoke(request, track_id):
 def toggle_like(request, track_id):
     track = get_object_or_404(Track, id=track_id)
     track.is_liked = not track.is_liked
-    track.save()
-    return JsonResponse({'is_liked': track.is_liked})
+    if track.is_liked:
+        track.is_disliked = False
+    track.save(update_fields=['is_liked', 'is_disliked'])
+    return JsonResponse({'is_liked': track.is_liked, 'is_disliked': track.is_disliked})
+
+
+@require_POST
+def toggle_dislike(request, track_id):
+    track = get_object_or_404(Track, id=track_id)
+    track.is_disliked = not track.is_disliked
+    if track.is_disliked:
+        track.is_liked = False
+    track.save(update_fields=['is_liked', 'is_disliked'])
+    return JsonResponse({'is_liked': track.is_liked, 'is_disliked': track.is_disliked})
 
 
 @require_POST
@@ -598,13 +624,150 @@ def library_api(request):
     return JsonResponse(data, safe=False)
 
 
-def serve_processed_file(request, filename):
-    # This view might be redundant if we serve via MEDIA_URL,
-    # but for strict no-cache streaming it's useful.
-    file_path = os.path.join(settings.MEDIA_ROOT, 'processed', filename)
-    if not os.path.exists(file_path):
-        return JsonResponse({'error': 'File not found'}, status=404)
+def ranged_media_serve(request, path):
+    """
+    Serves files from MEDIA_ROOT with HTTP 206 Partial Content (Range requests) support,
+    allowing browsers to seek/scrub seamlessly through audio and video files.
+    """
+    normalized_path = os.path.normpath(unquote(path)).lstrip(r'\/')
+    file_path = os.path.join(settings.MEDIA_ROOT, normalized_path)
 
-    response = FileResponse(open(file_path, 'rb'))
-    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    # Prevent directory traversal attacks
+    if not os.path.abspath(file_path).startswith(os.path.abspath(settings.MEDIA_ROOT)):
+        raise Http404("File not found")
+    if not os.path.exists(file_path) or os.path.isdir(file_path):
+        raise Http404("File not found")
+
+    file_size = os.path.getsize(file_path)
+    content_type, _ = mimetypes.guess_type(file_path)
+    content_type = content_type or 'application/octet-stream'
+
+    def apply_cors(resp):
+        resp["Access-Control-Allow-Origin"] = "*"
+        resp["Access-Control-Allow-Methods"] = "GET, HEAD, OPTIONS"
+        resp["Access-Control-Allow-Headers"] = "Range, Content-Type, Accept-Encoding"
+        resp["Access-Control-Expose-Headers"] = "Content-Range, Content-Length, Accept-Ranges"
+        return resp
+
+    range_header = request.META.get('HTTP_RANGE', '').strip()
+    range_match = re.match(r'bytes=(\d+)-(\d*)', range_header) if range_header else None
+
+    if range_match:
+        first_byte = int(range_match.group(1))
+        last_byte = int(range_match.group(2)) if range_match.group(2) else file_size - 1
+
+        if first_byte >= file_size or last_byte >= file_size or first_byte > last_byte:
+            resp = HttpResponse(status=416)
+            resp['Content-Range'] = f'bytes */{file_size}'
+            resp['Accept-Ranges'] = 'bytes'
+            return apply_cors(resp)
+
+        length = last_byte - first_byte + 1
+
+        def file_iterator(fp, offset, req_len, chunk_size=65536):
+            with open(fp, 'rb') as f:
+                f.seek(offset)
+                remaining = req_len
+                while remaining > 0:
+                    chunk = f.read(min(chunk_size, remaining))
+                    if not chunk:
+                        break
+                    remaining -= len(chunk)
+                    yield chunk
+
+        response = StreamingHttpResponse(
+            file_iterator(file_path, first_byte, length),
+            status=206,
+            content_type=content_type
+        )
+        response['Content-Length'] = str(length)
+        response['Content-Range'] = f'bytes {first_byte}-{last_byte}/{file_size}'
+        response['Accept-Ranges'] = 'bytes'
+        response['Cache-Control'] = 'no-cache'
+        return apply_cors(response)
+
+    def full_iterator(fp, chunk_size=65536):
+        with open(fp, 'rb') as f:
+            while chunk := f.read(chunk_size):
+                yield chunk
+
+    response = StreamingHttpResponse(
+        full_iterator(file_path),
+        status=200,
+        content_type=content_type
+    )
+    response['Content-Length'] = str(file_size)
+    response['Accept-Ranges'] = 'bytes'
+    return apply_cors(response)
+
+
+def serve_processed_file(request, filename):
+    return ranged_media_serve(request, os.path.join('processed', filename))
+
+
+def openapi_spec(request):
+    """Serve OpenAPI 3.1.0 specification as JSON."""
+    response = JsonResponse(get_openapi_spec(), json_dumps_params={'indent': 2})
+    response["Access-Control-Allow-Origin"] = "*"
+    response["Access-Control-Allow-Methods"] = "GET, OPTIONS"
     return response
+
+
+def scalar_docs(request):
+    """Render Scalar API reference UI."""
+    return render(request, 'music/scalar_docs.html')
+
+
+def health_check(request):
+    """Health check endpoint for container monitors and launcher readiness checks."""
+    response = JsonResponse({
+        'status': 'healthy',
+        'service': 'music_upscaler',
+        'version': '2.4.0'
+    })
+    response["Access-Control-Allow-Origin"] = "*"
+    return response
+
+
+FAVICON_SVG = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="mu_fav_grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00f2fe"/>
+      <stop offset="100%" stop-color="#4facfe"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0d1117"/>
+  <path d="M26 18v24.5a5.5 5.5 0 1 1-3.5-5.1V24h18v18.5a5.5 5.5 0 1 1-3.5-5.1V18H26z" fill="url(#mu_fav_grad)"/>
+</svg>"""
+
+
+@require_http_methods(["GET"])
+def favicon_view(request):
+    """Serve a lightweight SVG favicon to eliminate 404 spam in browser sessions."""
+    response = HttpResponse(FAVICON_SVG, content_type='image/svg+xml')
+    response['Cache-Control'] = 'public, max-age=86400'
+    return response
+
+
+def reconcile_missing_media(prune_orphans=False):
+    """
+    Scans tracks and synchronizes database state with physical disk files.
+    - If a cover image was deleted from disk, nulls out cover_image on the track.
+    - If prune_orphans is True and a track has neither audio nor processed file on disk, deletes the record.
+    Returns a dict with statistics.
+    """
+    fixed_covers = 0
+    pruned_tracks = 0
+    for track in Track.objects.all():
+        if track.cover_image and not track.has_cover:
+            track.cover_image = None
+            track.save(update_fields=['cover_image'])
+            fixed_covers += 1
+        if prune_orphans and not track.is_available:
+            track.delete()
+            pruned_tracks += 1
+    return {
+        'fixed_covers': fixed_covers,
+        'pruned_tracks': pruned_tracks,
+    }
+
