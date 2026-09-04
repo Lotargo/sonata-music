@@ -2,7 +2,7 @@ from django.conf import settings
 from django.db import models
 import os
 
-AUDIO_EXTENSIONS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.aiff', '.aif')
+AUDIO_EXTENSIONS = ('.mp3', '.wav', '.flac', '.ogg', '.m4a', '.aac', '.aiff', '.aif', '.opus')
 
 
 def track_upload_path(instance, filename):

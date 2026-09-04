@@ -14,3 +14,24 @@ media/
 verification_*.png
 .DS_Store
 debug_output/
+.samples/
+*.bin
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Python virtual environment
+.venv/
+venv/
+env/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# PyCharm / VS Code / other IDE configs
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -49,7 +49,15 @@
             <!-- Mode Selector -->
             <div id="processing-mode-section">
                 <label class="block text-sm font-medium text-slate-400 mb-2 uppercase tracking-wider text-xs">Режим обработки</label>
-                <div class="grid grid-cols-4 bg-slate-800 rounded-lg p-1 border border-slate-700 gap-1">
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 bg-slate-800 rounded-lg p-1 border border-slate-700 gap-1">
+                    <button id="mode-direct" onclick="setUploadMode('direct')" class="py-2.5 text-xs font-medium text-slate-400 hover:text-white transition flex flex-col items-center justify-center gap-1">
+                        <i data-lucide="arrow-left-right" class="w-4 h-4"></i>
+                        <span>Конвертация</span>
+                    </button>
+                    <button id="mode-stealth" onclick="setUploadMode('stealth')" class="py-2.5 text-xs font-medium text-slate-400 hover:text-white transition flex flex-col items-center justify-center gap-1">
+                        <i data-lucide="shield-check" class="w-4 h-4"></i>
+                        <span>Anti-AI</span>
+                    </button>
                     <button id="mode-ai" onclick="setUploadMode('ai')" class="py-2.5 text-xs font-bold rounded-md bg-indigo-600 text-white shadow-sm transition flex flex-col items-center justify-center gap-1">
                         <i data-lucide="sparkles" class="w-4 h-4"></i>
                         <span>AI-апскейл</span>
@@ -197,8 +205,10 @@
                     <select id="target-format" onchange="updateBitrateOptions()" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-2 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500">
                         <option value="wav">WAV</option>
                         <option value="mp3" selected>MP3</option>
+                        <option value="m4a">M4A (AAC)</option>
                         <option value="flac">FLAC</option>
                         <option value="ogg">OGG</option>
+                        <option value="opus">Opus</option>
                     </select>
                 </div>
                 <div>

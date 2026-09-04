@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import logging
 import soundfile as sf
 import numpy as np
@@ -65,6 +66,14 @@ class StudioDSP:
                 "voice_clarity": -1.0,
                 "compressor_amount": 0.6,
                 "stereo_width": 0.9,
+                "target_lufs": -14.0,
+            },
+            "stealth": {
+                "reverb_enabled": False,
+                "bass_boost": 0.5,
+                "voice_clarity": 1.0,
+                "compressor_amount": 0.55,
+                "stereo_width": 1.15,
                 "target_lufs": -14.0,
             },
         }
@@ -302,9 +311,8 @@ class StudioDSP:
             processed = board(audio, sample_rate)
 
             # 6. Save
-            output_dir = os.path.dirname(output_path)
-            if output_dir:
-                os.makedirs(output_dir, exist_ok=True)
+            output_file = Path(output_path)
+            output_file.parent.mkdir(parents=True, exist_ok=True)
 
             # Determine subtype (no easy way to pass this via params currently without changing signature massively)
             # Default to 24-bit for internal DSP
@@ -449,67 +457,74 @@ class StudioDSP:
             logger.error(f"Hybrid stem processing failed: {e}")
             raise e
 
-    def apply_suno_restoration(self, audio, sample_rate, params=None):
+    def apply_stealth_restoration(self, audio, sample_rate, params=None):
         """
-        Applies a 'Enhancement' chain specifically for Suno/MP3 restoration.
-        Chain: De-mud EQ, Exciter, Stereo Widen, Glue Compressor.
+        Applies a 'Stealth / Anti-AI' restoration chain specifically designed to de-mask
+        Suno/Udio artifacts, eliminate metallic harshness, cut mud, and destroy acoustic signatures.
+        Chain: De-mud EQ, De-harsh EQ, Air Exciter, Stereo Widen, Glue Compressor, Warm Tape Floor.
         """
-        logger.info("Applying Suno Restoration Chain...")
+        logger.info("Applying Stealth / Anti-AI Restoration Chain...")
 
         try:
             # Ensure audio is (channels, samples)
             if audio.ndim == 1:
                 audio = audio[np.newaxis, :]
 
-            # Pre-gain: Reduce mix gain slightly (-3dB) before processing
-            # With normalization removed, input is natural volume. -3dB allows headroom for EQ boosts.
+            # Pre-gain: -3dB attenuation for headroom
             audio = audio * 0.707
 
             # 1. Apply Stereo Widener First (NumPy)
-            # Gentle widening to fix narrow AI stereo field
             audio = self._apply_stereo_width(audio, 1.15)
 
             # 2. Build Pedalboard Chain
             board = Pedalboard()
 
             # --- EQ: Cleanup & De-mud ---
-            # Cut non-musical rumble
             board.append(HighpassFilter(cutoff_frequency_hz=30))
-            # Cut "Mud" / Boxiness (common in Suno generation)
+            # Cut "Mud" / Boxiness (320-380Hz common in Suno/Udio generation)
             board.append(PeakFilter(cutoff_frequency_hz=350, gain_db=-2.5, q=1.0))
 
+            # --- EQ: De-harsh (Cut metallic digital ring on AI vocals/instruments) ---
+            board.append(PeakFilter(cutoff_frequency_hz=4000, gain_db=-2.0, q=1.2))
+
             # --- EQ: Air & Presence ---
-            # Add "Air" to compensate for MP3 high-end rolloff
             board.append(HighShelfFilter(cutoff_frequency_hz=10000, gain_db=1.5))
 
             # --- Harmonic Exciter ---
-            # Very subtle saturation to generate missing harmonics
-            board.append(Distortion(drive_db=0.5))
+            board.append(Distortion(drive_db=0.4))
 
             # --- Glue Compressor ---
-            # "Mastering" style glue to bring elements together after separation
             board.append(
                 Compressor(
                     threshold_db=-12,
                     ratio=2.5,
-                    attack_ms=15,  # Moderate attack to catch peaks but keep punch
-                    release_ms=150,  # Moderate release for musical breathing
+                    attack_ms=15,
+                    release_ms=150,
                 )
             )
 
             # --- Safety Limiter ---
-            # Pedalboard Limiter caps at 0dB. We add Gain to enforce -1.0 dB safety ceiling.
             board.append(Limiter(threshold_db=-1.0))
             board.append(Gain(gain_db=-1.0))
 
             # 3. Process
             processed = board(audio, sample_rate)
 
+            # 4. Warm Analog Tape Noise Floor (-68 dB)
+            # Breaks mathematical silence in pauses without being perceptibly noisy to listeners
+            noise_gain = 10.0 ** (-68.0 / 20.0)
+            tape_noise = np.random.normal(0, noise_gain, processed.shape).astype(np.float32)
+            processed = processed + tape_noise
+
             return processed
 
         except Exception as e:
-            logger.error(f"Suno restoration polish failed: {e}")
+            logger.error(f"Stealth restoration polish failed: {e}")
             raise e
+
+    def apply_suno_restoration(self, audio, sample_rate, params=None):
+        """Backward compatibility alias pointing to apply_stealth_restoration."""
+        return self.apply_stealth_restoration(audio, sample_rate, params=params)
 
 
 # Create singleton

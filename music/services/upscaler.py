@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import torch
 import torchaudio
 import logging
@@ -177,45 +178,85 @@ class UpscalerService:
                 logger.error(f"Failed to load AudioSR model: {e}")
                 raise e
 
-    def _convert_format(self, input_wav, output_path, target_format, bitrate_str):
-        """Helper to convert WAV to other formats using pydub."""
+    def _convert_format(
+        self,
+        input_wav,
+        output_path,
+        target_format,
+        bitrate_str,
+        title=None,
+        artist=None,
+        album=None,
+        cover_image_path=None,
+    ):
+        """Helper to convert audio to other formats using pydub/ffmpeg, then embed clean metadata."""
+        target_format = str(target_format).lower().strip()
         logger.info(
             f"Converting to {target_format} (bitrate/depth: {bitrate_str}) using pydub"
         )
-        audio = AudioSegment.from_wav(input_wav)
+        audio = AudioSegment.from_file(input_wav)
 
-        format_map = {"mp3": "mp3", "flac": "flac", "ogg": "ogg", "vorbis": "ogg"}
-        out_fmt = format_map.get(target_format.lower(), target_format.lower())
+        format_map = {
+            "mp3": "mp3",
+            "flac": "flac",
+            "ogg": "ogg",
+            "vorbis": "ogg",
+            "m4a": "m4a",
+            "aac": "m4a",
+            "opus": "opus",
+            "wav": "wav",
+        }
+        out_fmt = format_map.get(target_format, target_format)
 
         # Handle Bitrate clamping for lossy formats
-        if out_fmt in ["mp3", "ogg"]:
-            # Parse numerical bitrate
+        if out_fmt in ["mp3", "ogg", "m4a", "opus"]:
             try:
-                # Remove 'k' and convert to int
-                kbps = int("".join(filter(str.isdigit, bitrate_str)))
+                kbps = int("".join(filter(str.isdigit, str(bitrate_str))))
             except ValueError:
-                kbps = 320  # Default fallback
+                kbps = 320 if out_fmt in ["mp3", "m4a"] else 160
 
-            # Clamp limits
             if out_fmt == "mp3":
                 kbps = min(kbps, 320)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting MP3 with bitrate {final_bitrate}")
+                audio.export(output_path, format="mp3", bitrate=final_bitrate)
             elif out_fmt == "ogg":
                 kbps = min(kbps, 500)
-
-            final_bitrate = f"{kbps}k"
-            logger.info(f"Exporting {out_fmt} with bitrate {final_bitrate}")
-            audio.export(output_path, format=out_fmt, bitrate=final_bitrate)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting OGG with bitrate {final_bitrate}")
+                audio.export(output_path, format="ogg", bitrate=final_bitrate)
+            elif out_fmt == "m4a":
+                kbps = min(kbps, 320)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting M4A (AAC) with bitrate {final_bitrate}")
+                audio.export(output_path, format="mp4", codec="aac", bitrate=final_bitrate)
+            elif out_fmt == "opus":
+                kbps = min(kbps, 256)
+                final_bitrate = f"{kbps}k"
+                logger.info(f"Exporting Opus with bitrate {final_bitrate}")
+                audio.export(output_path, format="opus", codec="libopus", bitrate=final_bitrate)
 
         elif out_fmt == "flac":
-            # FLAC is lossless, bitrate arg doesn't apply to compression level directly in pydub/ffmpeg simple interface
-            # We just export as FLAC. Pydub doesn't expose sample_fmt easily for export,
-            # but input was saved as 24-bit WAV if possible, so FLAC should retain high quality.
-            logger.info(f"Exporting {out_fmt} (lossless)")
+            logger.info(f"Exporting FLAC (lossless)")
+            audio.export(output_path, format="flac")
+        elif out_fmt == "wav":
+            logger.info(f"Exporting WAV")
+            audio.export(output_path, format="wav")
+        else:
             audio.export(output_path, format=out_fmt)
 
-        else:
-            # Fallback
-            audio.export(output_path, format=out_fmt)
+        # Clean and embed metadata
+        try:
+            from music.services.metadata import clean_and_embed_metadata
+            clean_and_embed_metadata(
+                output_path,
+                title=title,
+                artist=artist,
+                album=album,
+                cover_image_path=cover_image_path,
+            )
+        except Exception as e:
+            logger.warning(f"Failed to clean/embed metadata for {output_path}: {e}")
 
     def unload_model(self):
         """Unloads the model and frees VRAM/RAM."""
@@ -541,15 +582,39 @@ class UpscalerService:
         batch_size=2,
         dsp_preset="mastering",
         dsp_params=None,
+        title=None,
+        artist=None,
+        album=None,
+        cover_image_path=None,
     ):
         """
         Upscale/Process the audio file at input_path and save to output_path.
-        Modes: 'ai' (AudioSR), 'dsp' (Studio DSP), or 'hybrid' (Stem Separation + DSP).
+        Modes: 'direct' (Pass-through / Fast conversion), 'stealth' (Anti-AI Restoration),
+               'ai' (AudioSR), 'dsp' (Studio DSP), or 'hybrid' (Stem Separation + DSP).
         """
         try:
             logger.info(f"Starting processing ({mode}): {input_path} -> {output_path}")
 
             temp_wav = None
+
+            # --- DIRECT MODE (Fast Conversion / Passthrough / No AI / No DSP) ---
+            if mode == "direct":
+                Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+                self._convert_format(
+                    input_path,
+                    output_path,
+                    target_format,
+                    target_bitrate,
+                    title=title,
+                    artist=artist,
+                    album=album,
+                    cover_image_path=cover_image_path,
+                )
+                if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
+                    logger.error(f"Direct mode failed: Output file {output_path} is missing or empty.")
+                    return False
+                logger.info(f"Direct conversion complete: {output_path}")
+                return True
 
             # --- DSP MODE ---
             if mode == "dsp":
@@ -577,11 +642,25 @@ class UpscalerService:
                         )
                     else:
                         self._convert_format(
-                            temp_wav, output_path, target_format, target_bitrate
+                            temp_wav,
+                            output_path,
+                            target_format,
+                            target_bitrate,
+                            title=title,
+                            artist=artist,
+                            album=album,
+                            cover_image_path=cover_image_path,
                         )
                         # Cleanup temp
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
+                else:
+                    # Clean/embed metadata for WAV
+                    try:
+                        from music.services.metadata import clean_and_embed_metadata
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path)
+                    except Exception as e:
+                        logger.warning(f"Metadata embedding for WAV failed: {e}")
 
                 # Verify output before return
                 if not os.path.exists(output_path) or os.path.getsize(output_path) == 0:
@@ -672,26 +751,38 @@ class UpscalerService:
                         )
                     else:
                         self._convert_format(
-                            temp_wav, output_path, target_format, target_bitrate
+                            temp_wav,
+                            output_path,
+                            target_format,
+                            target_bitrate,
+                            title=title,
+                            artist=artist,
+                            album=album,
+                            cover_image_path=cover_image_path,
                         )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
+                else:
+                    try:
+                        from music.services.metadata import clean_and_embed_metadata
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path)
+                    except Exception as e:
+                        logger.warning(f"Metadata embedding for WAV failed: {e}")
 
                 # Generate metrics before return
                 self._generate_metrics_report(input_path, output_path)
                 return True
 
-            # --- RESTORATION MODE (Suno Enhancer: Demucs Filter + DSP) ---
-            if mode == "restoration":
-                logger.info("Starting Suno Restoration Pipeline...")
+            # --- RESTORATION & STEALTH MODE (Demucs Filter + Stealth/Suno Polish) ---
+            if mode in ["restoration", "stealth"]:
+                logger.info(f"Starting {mode.upper()} Restoration Pipeline...")
 
                 if target_format.lower() == "wav":
                     temp_wav = output_path
                 else:
                     temp_wav = output_path + ".tmp.wav"
 
-                # 1. Demucs Separation (Re-synthesis)
-                # We separate and recombine to "filter" MP3 artifacts
+                # 1. Demucs Separation (Re-synthesis to break acoustic watermarks)
                 with tempfile.TemporaryDirectory() as stem_dir:
                     logger.info(
                         f"Step 1: Separating stems for re-synthesis into {stem_dir}..."
@@ -706,7 +797,6 @@ class UpscalerService:
                     current_sr = target_sample_rate  # Will update from first stem
 
                     for s_path in stems_map.values():
-                        # Read as float32 to match final_mix dtype and save memory
                         s_data, s_sr = sf.read(s_path, dtype="float32")
                         current_sr = s_sr
 
@@ -725,7 +815,6 @@ class UpscalerService:
                     )
 
                     for s_data in loaded_stems:
-                        # Pad if needed
                         if s_data.shape[1] < max_len:
                             pad = np.zeros(
                                 (s_data.shape[0], max_len - s_data.shape[1]),
@@ -734,30 +823,40 @@ class UpscalerService:
                             s_data = np.concatenate([s_data, pad], axis=1)
                         final_mix += s_data
 
-                # 3. DSP Polish (Suno Specific)
-                logger.info("Step 3: Applying Suno DSP Polish...")
-                polished = dsp.apply_suno_restoration(final_mix, current_sr)
+                # 3. DSP Polish (Stealth / Anti-AI specific)
+                logger.info("Step 3: Applying Stealth DSP Polish...")
+                polished = dsp.apply_stealth_restoration(final_mix, current_sr)
 
                 # 4. Save Final
-                # Resample if target_sample_rate differs
                 if current_sr != target_sample_rate:
                     import resampy
-
                     polished = resampy.resample(
                         polished, current_sr, target_sample_rate, axis=1
                     )
 
-                # Write
                 sf.write(temp_wav, polished.T, target_sample_rate)
 
                 # Convert
                 if target_format.lower() != "wav":
                     if self.ffmpeg_available:
                         self._convert_format(
-                            temp_wav, output_path, target_format, target_bitrate
+                            temp_wav,
+                            output_path,
+                            target_format,
+                            target_bitrate,
+                            title=title,
+                            artist=artist,
+                            album=album,
+                            cover_image_path=cover_image_path,
                         )
                         if os.path.exists(temp_wav) and temp_wav != output_path:
                             os.remove(temp_wav)
+                else:
+                    try:
+                        from music.services.metadata import clean_and_embed_metadata
+                        clean_and_embed_metadata(output_path, title=title, artist=artist, album=album, cover_image_path=cover_image_path)
+                    except Exception as e:
+                        logger.warning(f"Metadata embedding for WAV failed: {e}")
 
                 # Generate metrics before return
                 self._generate_metrics_report(input_path, output_path)
@@ -953,7 +1052,14 @@ class UpscalerService:
                     )
                 else:
                     self._convert_format(
-                        temp_wav, output_path, target_format, target_bitrate
+                        temp_wav,
+                        output_path,
+                        target_format,
+                        target_bitrate,
+                        title=title,
+                        artist=artist,
+                        album=album,
+                        cover_image_path=cover_image_path,
                     )
                     if (
                         temp_wav

@@ -221,7 +221,7 @@ function setUploadMode(mode) {
     document.getElementById('processing-mode').value = mode;
 
     // Update Buttons
-    ['ai', 'hybrid', 'restoration', 'dsp'].forEach(m => {
+    ['direct', 'stealth', 'ai', 'hybrid', 'restoration', 'dsp'].forEach(m => {
         const btn = document.getElementById(`mode-${m}`);
         if (!btn) return;
         if (m === mode) {
@@ -239,7 +239,15 @@ function setUploadMode(mode) {
     const modeDesc = document.getElementById('mode-desc');
     const dspLabel = document.getElementById('dsp-label');
 
-    if (mode === 'ai') {
+    if (mode === 'direct') {
+        aiSettings.classList.add('hidden');
+        dspSettings.classList.add('hidden');
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Конвертация:</span> прямое быстрое перекодирование без изменения звука нейросетями или DSP.`;
+    } else if (mode === 'stealth') {
+        aiSettings.classList.add('hidden');
+        dspSettings.classList.add('hidden');
+        modeDesc.innerHTML = `<span class="text-yellow-400 font-bold">Anti-AI Stealth:</span> разрушение водяных знаков, устранение коробочности (350 Гц), мягкий де-харш, стерео-мастеринг и очистка метаданных.`;
+    } else if (mode === 'ai') {
         aiSettings.classList.remove('hidden');
         dspSettings.classList.remove('hidden');
         dspLabel.textContent = "DSP-подготовка";
@@ -300,7 +308,8 @@ function updateDspPreset() {
         "deep_bass": { stereo: 100, bass: 6, clarity: 1.5, comp: 60, rev: false },
         "clear": { stereo: 110, bass: -2, clarity: 5, comp: 40, rev: false },
         "warm": { stereo: 90, bass: 2, clarity: -1, comp: 60, rev: true, revSize: 30, revMix: 10 },
-        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false }
+        "punchy": { stereo: 100, bass: 4, clarity: 2, comp: 80, rev: false },
+        "stealth": { stereo: 115, bass: 0.5, clarity: 1.0, comp: 55, rev: false }
     };
 
     const config = presets[preset];
@@ -384,21 +393,41 @@ function updateBitrateOptions() {
 
     select.innerHTML = '';
 
-    if (format === 'mp3' || format === 'ogg') {
+    if (['mp3', 'ogg', 'm4a', 'opus'].includes(format)) {
         label.innerText = 'Bitrate';
-        const opts = [
-            {v: '128k', t: '128 kbps'},
-            {v: '192k', t: '192 kbps'},
-            {v: '256k', t: '256 kbps'},
-            {v: '320k', t: '320 kbps (High)'}
-        ];
-        if (format === 'ogg') {
-            opts.push({v: '500k', t: '500 kbps (Max)'});
+        let opts = [];
+        if (format === 'opus') {
+            opts = [
+                {v: '96k', t: '96 kbps (Voice/Light)'},
+                {v: '128k', t: '128 kbps'},
+                {v: '160k', t: '160 kbps (High Quality)'},
+                {v: '192k', t: '192 kbps'},
+                {v: '256k', t: '256 kbps (Ultra)'}
+            ];
+        } else if (format === 'm4a') {
+            opts = [
+                {v: '128k', t: '128 kbps (Standard)'},
+                {v: '192k', t: '192 kbps'},
+                {v: '256k', t: '256 kbps (Apple Music / Pro)'},
+                {v: '320k', t: '320 kbps (Max)'}
+            ];
+        } else {
+            opts = [
+                {v: '128k', t: '128 kbps'},
+                {v: '192k', t: '192 kbps'},
+                {v: '256k', t: '256 kbps'},
+                {v: '320k', t: '320 kbps (High)'}
+            ];
+            if (format === 'ogg') {
+                opts.push({v: '500k', t: '500 kbps (Max)'});
+            }
         }
+
+        const defaultVal = format === 'opus' ? '160k' : (format === 'm4a' ? '256k' : '320k');
         opts.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.v; opt.text = o.t;
-            if(o.v === '320k') opt.selected = true;
+            if (o.v === defaultVal) opt.selected = true;
             select.appendChild(opt);
         });
     } else {
@@ -411,7 +440,7 @@ function updateBitrateOptions() {
         opts.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.v; opt.text = o.t;
-            if(o.v === '24-bit') opt.selected = true;
+            if (o.v === '24-bit') opt.selected = true;
             select.appendChild(opt);
         });
     }

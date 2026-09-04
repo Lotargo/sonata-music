@@ -19,10 +19,10 @@ from .services.metadata import extract_metadata
 
 logger = logging.getLogger(__name__)
 
-PROCESSING_MODES = {'ai', 'dsp', 'hybrid', 'restoration'}
-TARGET_FORMATS = {'wav', 'mp3', 'flac', 'ogg'}
+PROCESSING_MODES = {'ai', 'dsp', 'hybrid', 'restoration', 'direct', 'stealth'}
+TARGET_FORMATS = {'wav', 'mp3', 'flac', 'ogg', 'm4a', 'opus'}
 TARGET_SAMPLE_RATES = {44100, 48000, 96000}
-LOSSY_BITRATES = {'128k', '192k', '256k', '320k', '500k'}
+LOSSY_BITRATES = {'96k', '128k', '160k', '192k', '256k', '320k', '500k'}
 LOSSLESS_DEPTHS = {'16-bit', '24-bit', '32-bit'}
 QUALITY_STEPS = {
     'fast': 25,
@@ -130,11 +130,17 @@ def normalize_processing_payload(data):
     if sample_rate not in TARGET_SAMPLE_RATES:
         sample_rate = 48000
 
-    bitrate_default = '320k' if target_format in {'mp3', 'ogg'} else '24-bit'
+    if target_format in {'mp3', 'm4a'}:
+        bitrate_default = '320k'
+    elif target_format in {'ogg', 'opus'}:
+        bitrate_default = '160k'
+    else:
+        bitrate_default = '24-bit'
+
     bitrate = str(data.get('bitrate') or bitrate_default)
-    if target_format in {'mp3', 'ogg'}:
-        bitrate = bitrate if bitrate in LOSSY_BITRATES else '320k'
-        if target_format == 'mp3' and bitrate == '500k':
+    if target_format in {'mp3', 'ogg', 'm4a', 'opus'}:
+        bitrate = bitrate if bitrate in LOSSY_BITRATES else bitrate_default
+        if target_format in {'mp3', 'm4a'} and bitrate == '500k':
             bitrate = '320k'
     else:
         bitrate = bitrate if bitrate in LOSSLESS_DEPTHS else '24-bit'
@@ -281,7 +287,9 @@ def run_upscaling_thread(track_id, params):
             'ai': '_ai',
             'dsp': '_dsp',
             'hybrid': '_hybrid',
-            'restoration': '_restored'
+            'restoration': '_restored',
+            'direct': '_converted',
+            'stealth': '_stealth',
         }
         suffix = suffix_map.get(mode, '_ai')
         output_filename = f"{base}{suffix}.{target_format}"
@@ -296,6 +304,8 @@ def run_upscaling_thread(track_id, params):
         track.target_bitrate = params.get('bitrate')
         track.save()
 
+        cover_image_path = track.cover_image.path if track.cover_image else None
+
         # Call Service
         success = upscaler.process_track(
             input_path=input_path,
@@ -309,7 +319,10 @@ def run_upscaling_thread(track_id, params):
             target_sample_rate=int(params.get('sample_rate', 48000)),
             target_bitrate=params.get('bitrate', '320k'),
             dsp_preset=params.get('dsp_preset', 'mastering'),
-            dsp_params=params.get('dsp_params')
+            dsp_params=params.get('dsp_params'),
+            title=track.title,
+            artist=track.artist,
+            cover_image_path=cover_image_path,
         )
 
         if success:
