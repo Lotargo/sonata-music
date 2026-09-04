@@ -381,6 +381,17 @@ class UpscalerService:
             else:
                 high_band = np.tanh(high_band)
 
+            # Natural Air Stereo Spreader: If stereo, give newly synthesized air (>15.5k)
+            # a three-dimensional room dimension instead of a pinpoint mono center.
+            # Collapses to EXACT 0 in mono summing (100% mono compatible, zero comb-filtering).
+            if high_band.shape[0] == 2:
+                delay_samples = 12  # ~0.25ms at 48kHz
+                high_r_delayed = np.roll(high_band[1], delay_samples)
+                high_r_delayed[:delay_samples] = 0.0
+                side_air = (high_band[0] - high_r_delayed) * 0.35
+                high_band[0] = high_band[0] + side_air
+                high_band[1] = high_band[1] - side_air
+
             blended_np = low_band + high_band
 
             # Peak safety check to prevent digital overs
