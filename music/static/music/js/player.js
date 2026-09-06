@@ -106,12 +106,12 @@ function getTrackTitle(track) {
 
 function getStatusLabel(track) {
     const map = {
-        pending: 'Pending',
-        processing: 'Processing',
-        completed: 'Completed',
-        failed: 'Failed'
+        pending: 'В очереди',
+        processing: 'Обработка',
+        completed: 'Готово',
+        failed: 'Ошибка'
     };
-    return track?.status_display || map[track?.status] || track?.status || 'Pending';
+    return map[track?.status] || track?.status_display || track?.status || 'Pending';
 }
 
 function coverMarkup(track, placeholderClass = '') {
@@ -123,10 +123,19 @@ function coverMarkup(track, placeholderClass = '') {
         : '<i data-lucide="music"></i>';
 }
 
+function trackMetadataMarkup(track) {
+    const bpm = Number(track.bpm);
+    const key = String(track.musical_key || '').trim();
+    return `<div class="row-metadata">
+        <span class="row-artist">${escapeHtml(track.artist || 'Неизвестный исполнитель')}</span>
+        ${Number.isFinite(bpm) && bpm > 0 ? `<span class="track-badge track-badge-bpm" title="Темп">${Math.round(bpm)} BPM</span>` : ''}
+        ${key ? `<span class="track-badge track-badge-key" title="Тональность">${escapeHtml(key)}</span>` : ''}
+    </div>`;
+}
+
 function trackRowMarkup(track) {
     const id = Number(track.id);
     const title = escapeHtml(getTrackTitle(track));
-    const artist = escapeHtml(track.artist || 'Неизвестный исполнитель');
     const status = escapeHtml(track.status || 'pending');
     const statusLabel = escapeHtml(getStatusLabel(track));
     const detailsHidden = track.status === 'completed' ? '' : ' hidden';
@@ -141,7 +150,7 @@ function trackRowMarkup(track) {
             </div>
             <div class="row-main">
                 <h3 title="${title}" data-track-title>${title}</h3>
-                <p>${artist}</p>
+                ${trackMetadataMarkup(track)}
             </div>
             <span class="status-badge status-${status}" data-track-status>${statusLabel}</span>
             <span class="row-stat" data-track-plays>${Number(track.play_count || 0)} просл.</span>
@@ -182,6 +191,8 @@ function renderLibraryFromTracks(force = false) {
         id: track.id,
         title: getTrackTitle(track),
         artist: track.artist,
+        bpm: track.bpm,
+        musical_key: track.musical_key,
         status: track.status,
         status_display: getStatusLabel(track),
         cover_path: track.cover_path,

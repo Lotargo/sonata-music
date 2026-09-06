@@ -155,17 +155,17 @@
                 </div>
                 <div class="row-main">
                     <h3 title="{{ track.display_title }}">{{ track.display_title|default:"Без названия" }}</h3>
-                    <div class="flex items-center gap-2 text-xs text-slate-400">
-                        <span>{{ track.artist|default:"Неизвестный исполнитель" }}</span>
+                    <div class="row-metadata">
+                        <span class="row-artist">{{ track.artist|default:"Неизвестный исполнитель" }}</span>
                         {% if track.bpm %}
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">{{ track.bpm|floatformat:0 }} BPM</span>
+                            <span class="track-badge track-badge-bpm" title="Темп">{{ track.bpm|floatformat:0 }} BPM</span>
                         {% endif %}
                         {% if track.musical_key %}
-                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">{{ track.musical_key }}</span>
+                            <span class="track-badge track-badge-key" title="Тональность">{{ track.musical_key }}</span>
                         {% endif %}
                     </div>
                 </div>
-                <span class="status-badge status-{{ track.status }}">{{ track.get_status_display }}</span>
+                <span class="status-badge status-{{ track.status }}">{% if track.status == "completed" %}Готово{% elif track.status == "processing" %}Обработка{% elif track.status == "failed" %}Ошибка{% else %}В очереди{% endif %}</span>
                 <span class="row-stat">{{ track.play_count }} просл.</span>
                 <div class="row-actions">
                     {% if track.status == 'completed' %}
